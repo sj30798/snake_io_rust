@@ -569,21 +569,30 @@ impl Game {
                 strongest_len = strongest_len.max(self.snakes[*i].len());
             }
 
-            let strongest_count = indices
+            let strongest_indices: Vec<usize> = indices
                 .iter()
-                .filter(|i| self.snakes[**i].len() == strongest_len)
-                .count();
+                .copied()
+                .filter(|i| self.snakes[*i].len() == strongest_len)
+                .collect();
 
-            if strongest_count > 1 {
+            let player_wins_tie = strongest_indices
+                .iter()
+                .any(|i| self.snakes[*i].is_player);
+
+            if strongest_indices.len() > 1 && !player_wins_tie {
                 for i in indices {
                     self.snakes[i].alive = false;
                 }
             } else {
-                let winner = indices
-                    .iter()
-                    .copied()
-                    .find(|i| self.snakes[*i].len() == strongest_len)
-                    .unwrap_or(indices[0]);
+                let winner = if player_wins_tie {
+                    strongest_indices
+                        .iter()
+                        .copied()
+                        .find(|i| self.snakes[*i].is_player)
+                        .unwrap_or(strongest_indices[0])
+                } else {
+                    strongest_indices[0]
+                };
                 let mut growth = 0usize;
                 for i in indices {
                     if i != winner {
@@ -701,10 +710,17 @@ impl Game {
                 }
                 had_overlap = true;
 
+                let has_head = entries
+                    .iter()
+                    .any(|(idx, seg)| self.snakes[*idx].alive && *seg == 0);
+
                 let owner = entries
                     .iter()
                     .filter(|(idx, _)| self.snakes[*idx].alive)
-                    .max_by_key(|(idx, _)| (self.snakes[*idx].len(), usize::MAX - self.snakes[*idx].id))
+                    .max_by_key(|(idx, seg)| {
+                        let head_priority = if has_head && *seg == 0 { 1usize } else { 0usize };
+                        (head_priority, self.snakes[*idx].len(), usize::MAX - self.snakes[*idx].id)
+                    })
                     .map(|(idx, _)| *idx);
 
                 let Some(owner_index) = owner else {
