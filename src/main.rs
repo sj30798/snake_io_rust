@@ -7,8 +7,10 @@ use std::time::{Duration, Instant};
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::execute;
+use crossterm::queue;
 use crossterm::terminal::{
-    Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate, EnterAlternateScreen,
+    LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use rand::Rng;
 
@@ -820,18 +822,18 @@ impl Game {
 
     fn render(&self) -> std::io::Result<()> {
         let mut out = stdout();
-        execute!(out, MoveTo(0, 0), Clear(ClearType::All))?;
+        queue!(out, BeginSynchronizedUpdate, MoveTo(0, 0))?;
 
         let player_score = self.player().map_or(0, |p| p.len());
         let alive_snakes = self.snakes.iter().filter(|s| s.alive).count();
-        writeln!(
-            out,
+        let mut lines = Vec::new();
+        lines.push(format!(
             "Snake IO (Rust) [{}]  Score: {player_score}  High Score: {}  Time Left: {}s  Alive Snakes: {alive_snakes}",
             self.settings.label(),
             self.high_score,
             self.remaining_seconds()
-        )?;
-        writeln!(out, "Controls: Arrow keys move | Q or Esc quit")?;
+        ));
+        lines.push("Controls: Arrow keys move | Q or Esc quit".to_string());
 
         let mut grid = vec![vec![' '; WIDTH as usize]; HEIGHT as usize];
 
@@ -850,28 +852,39 @@ impl Game {
             }
         }
 
-        writeln!(out, "+{}+", "-".repeat(WIDTH as usize))?;
+        lines.push(format!("+{}+", "-".repeat(WIDTH as usize)));
         for row in &grid {
-            write!(out, "|")?;
+            let mut row_text = String::with_capacity(WIDTH as usize + 2);
+            row_text.push('|');
             for c in row {
-                write!(out, "{c}")?;
+                row_text.push(*c);
             }
-            writeln!(out, "|")?;
+            row_text.push('|');
+            lines.push(row_text);
         }
-        writeln!(out, "+{}+", "-".repeat(WIDTH as usize))?;
+        lines.push(format!("+{}+", "-".repeat(WIDTH as usize)));
 
         for snake in &self.snakes {
             let status = if snake.alive { "alive" } else { "out" };
-            writeln!(
-                out,
+            lines.push(format!(
                 "#{} {} [{}]: {} ({status})",
                 snake.id,
                 snake.name,
                 snake.symbol,
                 snake.len()
-            )?;
+            ));
         }
 
+        for (i, line) in lines.iter().enumerate() {
+            queue!(
+                out,
+                MoveTo(0, i as u16),
+                Clear(ClearType::CurrentLine)
+            )?;
+            write!(out, "{line}")?;
+        }
+
+        queue!(out, EndSynchronizedUpdate)?;
         out.flush()
     }
 
