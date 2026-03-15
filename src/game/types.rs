@@ -59,6 +59,7 @@ pub(crate) struct Snake {
     pub(crate) pending_growth: usize,
     pub(crate) is_player: bool,
     pub(crate) alive: bool,
+    pub(crate) eliminated_at: Option<u64>,
     pub(crate) symbol: char,
     pub(crate) color: Color,
 }
@@ -200,6 +201,7 @@ pub(crate) fn make_snake(
         pending_growth: 0,
         is_player,
         alive: true,
+        eliminated_at: None,
         symbol,
         color,
     }

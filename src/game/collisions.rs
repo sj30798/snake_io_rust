@@ -35,7 +35,7 @@ impl Game {
 
             if strongest_indices.len() > 1 && !player_wins_tie {
                 for i in indices {
-                    self.snakes[i].alive = false;
+                    self.eliminate_snake(i);
                 }
             } else {
                 let winner = if player_wins_tie {
@@ -51,7 +51,7 @@ impl Game {
                 for i in indices {
                     if i != winner {
                         growth += self.snakes[i].len();
-                        self.snakes[i].alive = false;
+                        self.eliminate_snake(i);
                     }
                 }
                 self.snakes[winner].pending_growth += growth;
@@ -60,25 +60,23 @@ impl Game {
     }
 
     pub(crate) fn resolve_wall_and_self_collisions(&mut self) {
-        for snake in &mut self.snakes {
-            if !snake.alive {
+        for i in 0..self.snakes.len() {
+            if !self.snakes[i].alive {
                 continue;
             }
-            let head = match snake.head() {
+            let head = match self.snakes[i].head() {
                 Some(h) => h,
                 None => continue,
             };
 
             if head.x < 0 || head.x >= crate::game::types::WIDTH || head.y < 0 || head.y >= crate::game::types::HEIGHT {
-                snake.alive = false;
+                self.eliminate_snake(i);
                 continue;
             }
 
-            for segment in snake.body.iter().skip(1) {
-                if *segment == head {
-                    snake.alive = false;
-                    break;
-                }
+            let hit_self = self.snakes[i].body.iter().skip(1).any(|segment| *segment == head);
+            if hit_self {
+                self.eliminate_snake(i);
             }
         }
     }
@@ -116,7 +114,7 @@ impl Game {
 
             if seg_index == 0 {
                 let victim_len = self.snakes[victim].len();
-                self.snakes[victim].alive = false;
+                self.eliminate_snake(victim);
                 self.snakes[eater].pending_growth += victim_len;
             } else {
                 let victim_len = self.snakes[victim].len();
@@ -127,7 +125,7 @@ impl Game {
                 let eaten_amount = victim_len - kept_len;
                 self.snakes[victim].body.truncate(kept_len);
                 if self.snakes[victim].body.is_empty() {
-                    self.snakes[victim].alive = false;
+                    self.eliminate_snake(victim);
                 }
                 self.snakes[eater].pending_growth += eaten_amount;
             }
@@ -190,7 +188,7 @@ impl Game {
 
                     if seg_index == 0 {
                         let victim_len = self.snakes[snake_index].len();
-                        self.snakes[snake_index].alive = false;
+                        self.eliminate_snake(snake_index);
                         self.snakes[owner_index].pending_growth += victim_len;
                     } else {
                         let victim_len = self.snakes[snake_index].len();
@@ -198,7 +196,7 @@ impl Game {
                         let eaten_amount = victim_len.saturating_sub(kept_len);
                         self.snakes[snake_index].body.truncate(kept_len);
                         if self.snakes[snake_index].body.is_empty() {
-                            self.snakes[snake_index].alive = false;
+                            self.eliminate_snake(snake_index);
                         }
                         self.snakes[owner_index].pending_growth += eaten_amount;
                     }

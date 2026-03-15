@@ -154,8 +154,16 @@ impl Game {
         write!(out, "+{}+", "-".repeat(WIDTH as usize))?;
         line += 1;
 
+        let elapsed = self.start.elapsed().as_secs();
         for snake in &self.snakes {
-            let status = if snake.alive { "alive" } else { "out" };
+            let status = if snake.alive {
+                format!("alive | survival {}s", elapsed)
+            } else {
+                format!(
+                    "out | survived {}s",
+                    snake.eliminated_at.unwrap_or(elapsed)
+                )
+            };
             queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
             queue!(out, SetForegroundColor(snake.color))?;
             write!(
@@ -185,9 +193,27 @@ impl Game {
         writeln!(out, "High Score Achieved: {}", self.high_score)?;
         writeln!(out)?;
         writeln!(out, "Final Standings:")?;
-        for snake in &self.snakes {
+        for (rank, index) in self.ranked_indices().iter().enumerate() {
+            let snake = &self.snakes[*index];
+            let status = if snake.alive {
+                if self.remaining_seconds() == 0 {
+                    "alive at clock end".to_string()
+                } else {
+                    "last alive".to_string()
+                }
+            } else {
+                format!("eliminated at {}s", snake.eliminated_at.unwrap_or(0))
+            };
             queue!(out, SetForegroundColor(snake.color))?;
-            writeln!(out, "- #{} {}: {}", snake.id, snake.name, snake.len())?;
+            writeln!(
+                out,
+                "{}. #{} {}: length {} ({})",
+                rank + 1,
+                snake.id,
+                snake.name,
+                snake.len(),
+                status
+            )?;
             queue!(out, ResetColor)?;
         }
         writeln!(out)?;

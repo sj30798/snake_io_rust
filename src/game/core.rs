@@ -60,7 +60,7 @@ impl Game {
     fn is_finished(&self) -> bool {
         self.quit_requested
             || self.elapsed_seconds() >= self.settings.game_time_seconds
-            || !self.player().is_some_and(|p| p.alive)
+            || self.alive_snake_count() <= 1
     }
 
     fn elapsed_seconds(&self) -> u64 {
@@ -87,21 +87,66 @@ impl Game {
         self.snakes.iter().find(|s| s.is_player)
     }
 
+    pub(crate) fn alive_snake_count(&self) -> usize {
+        self.snakes.iter().filter(|s| s.alive).count()
+    }
+
+    pub(crate) fn eliminate_snake(&mut self, index: usize) {
+        if !self.snakes[index].alive {
+            return;
+        }
+        self.snakes[index].alive = false;
+        self.snakes[index].eliminated_at = Some(self.elapsed_seconds());
+    }
+
+    fn rank_key_for(&self, index: usize, clock_ended: bool) -> (u8, u64, usize, usize) {
+        let snake = &self.snakes[index];
+        if snake.alive {
+            if clock_ended {
+                // Survived to clock end: rank by length first.
+                (2, 0, snake.len(), usize::MAX - snake.id)
+            } else {
+                // Last snake alive before timeout.
+                (3, 0, snake.len(), usize::MAX - snake.id)
+            }
+        } else {
+            // Eliminated before end: rank by survival time, then length.
+            (
+                1,
+                snake.eliminated_at.unwrap_or(0),
+                snake.len(),
+                usize::MAX - snake.id,
+            )
+        }
+    }
+
+    pub(crate) fn ranked_indices(&self) -> Vec<usize> {
+        let mut indices: Vec<usize> = (0..self.snakes.len()).collect();
+        let clock_ended = self.elapsed_seconds() >= self.settings.game_time_seconds;
+        indices.sort_by(|a, b| {
+            let ka = self.rank_key_for(*a, clock_ended);
+            let kb = self.rank_key_for(*b, clock_ended);
+            kb.cmp(&ka)
+        });
+        indices
+    }
+
     pub(crate) fn build_summary(&self) -> RoundSummary {
-        let winner = self
-            .snakes
-            .iter()
-            .max_by_key(|s| s.len())
-            .map(|s| format!("{} (length {})", s.name, s.len()))
+        let ranked = self.ranked_indices();
+        let winner = ranked
+            .first()
+            .map(|i| {
+                let s = &self.snakes[*i];
+                format!("{} (length {})", s.name, s.len())
+            })
             .unwrap_or_else(|| "No winner".to_string());
 
-        let player_alive = self.player().is_some_and(|s| s.alive);
         let end_reason = if self.quit_requested {
             "Quit requested".to_string()
-        } else if !player_alive {
-            "Player collided and was eliminated".to_string()
-        } else {
+        } else if self.elapsed_seconds() >= self.settings.game_time_seconds {
             "Timer ended".to_string()
+        } else {
+            "Only one snake remaining".to_string()
         };
 
         RoundSummary { winner, end_reason }
