@@ -1,0 +1,213 @@
+use std::collections::{HashMap, HashSet};
+
+use crate::game::core::Game;
+use crate::game::types::Point;
+
+impl Game {
+    pub(crate) fn resolve_head_to_head(&mut self) {
+        let mut positions: HashMap<Point, Vec<usize>> = HashMap::new();
+        for (i, snake) in self.snakes.iter().enumerate() {
+            if !snake.alive {
+                continue;
+            }
+            if let Some(h) = snake.head() {
+                positions.entry(h).or_default().push(i);
+            }
+        }
+
+        for indices in positions.into_values() {
+            if indices.len() <= 1 {
+                continue;
+            }
+
+            let mut strongest_len = 0usize;
+            for i in &indices {
+                strongest_len = strongest_len.max(self.snakes[*i].len());
+            }
+
+            let strongest_indices: Vec<usize> = indices
+                .iter()
+                .copied()
+                .filter(|i| self.snakes[*i].len() == strongest_len)
+                .collect();
+
+            let player_wins_tie = strongest_indices.iter().any(|i| self.snakes[*i].is_player);
+
+            if strongest_indices.len() > 1 && !player_wins_tie {
+                for i in indices {
+                    self.snakes[i].alive = false;
+                }
+            } else {
+                let winner = if player_wins_tie {
+                    strongest_indices
+                        .iter()
+                        .copied()
+                        .find(|i| self.snakes[*i].is_player)
+                        .unwrap_or(strongest_indices[0])
+                } else {
+                    strongest_indices[0]
+                };
+                let mut growth = 0usize;
+                for i in indices {
+                    if i != winner {
+                        growth += self.snakes[i].len();
+                        self.snakes[i].alive = false;
+                    }
+                }
+                self.snakes[winner].pending_growth += growth;
+            }
+        }
+    }
+
+    pub(crate) fn resolve_wall_and_self_collisions(&mut self) {
+        for snake in &mut self.snakes {
+            if !snake.alive {
+                continue;
+            }
+            let head = match snake.head() {
+                Some(h) => h,
+                None => continue,
+            };
+
+            if head.x < 0 || head.x >= crate::game::types::WIDTH || head.y < 0 || head.y >= crate::game::types::HEIGHT {
+                snake.alive = false;
+                continue;
+            }
+
+            for segment in snake.body.iter().skip(1) {
+                if *segment == head {
+                    snake.alive = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    pub(crate) fn resolve_snake_eating(&mut self) {
+        let mut interactions = Vec::new();
+
+        for eater_index in 0..self.snakes.len() {
+            if !self.snakes[eater_index].alive {
+                continue;
+            }
+            let eater_head = match self.snakes[eater_index].head() {
+                Some(h) => h,
+                None => continue,
+            };
+
+            for victim_index in 0..self.snakes.len() {
+                if eater_index == victim_index || !self.snakes[victim_index].alive {
+                    continue;
+                }
+
+                for (seg_index, segment) in self.snakes[victim_index].body.iter().copied().enumerate() {
+                    if segment == eater_head {
+                        interactions.push((eater_index, victim_index, seg_index));
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (eater, victim, seg_index) in interactions {
+            if !self.snakes[eater].alive || !self.snakes[victim].alive {
+                continue;
+            }
+
+            if seg_index == 0 {
+                let victim_len = self.snakes[victim].len();
+                self.snakes[victim].alive = false;
+                self.snakes[eater].pending_growth += victim_len;
+            } else {
+                let victim_len = self.snakes[victim].len();
+                if seg_index >= victim_len {
+                    continue;
+                }
+                let kept_len = seg_index.saturating_sub(1);
+                let eaten_amount = victim_len - kept_len;
+                self.snakes[victim].body.truncate(kept_len);
+                if self.snakes[victim].body.is_empty() {
+                    self.snakes[victim].alive = false;
+                }
+                self.snakes[eater].pending_growth += eaten_amount;
+            }
+        }
+    }
+
+    pub(crate) fn resolve_cross_snake_overlaps(&mut self) {
+        for _ in 0..3 {
+            let mut occupancy: HashMap<Point, Vec<(usize, usize)>> = HashMap::new();
+            for (snake_index, snake) in self.snakes.iter().enumerate() {
+                if !snake.alive {
+                    continue;
+                }
+                for (seg_index, segment) in snake.body.iter().copied().enumerate() {
+                    occupancy
+                        .entry(segment)
+                        .or_default()
+                        .push((snake_index, seg_index));
+                }
+            }
+
+            let mut had_overlap = false;
+            for entries in occupancy.into_values() {
+                let alive_distinct = entries
+                    .iter()
+                    .filter(|(idx, _)| self.snakes[*idx].alive)
+                    .map(|(idx, _)| *idx)
+                    .collect::<HashSet<_>>();
+
+                if alive_distinct.len() <= 1 {
+                    continue;
+                }
+                had_overlap = true;
+
+                let has_head = entries
+                    .iter()
+                    .any(|(idx, seg)| self.snakes[*idx].alive && *seg == 0);
+
+                let owner = entries
+                    .iter()
+                    .filter(|(idx, _)| self.snakes[*idx].alive)
+                    .max_by_key(|(idx, seg)| {
+                        let head_priority = if has_head && *seg == 0 { 1usize } else { 0usize };
+                        (
+                            head_priority,
+                            self.snakes[*idx].len(),
+                            usize::MAX - self.snakes[*idx].id,
+                        )
+                    })
+                    .map(|(idx, _)| *idx);
+
+                let Some(owner_index) = owner else {
+                    continue;
+                };
+
+                for (snake_index, seg_index) in entries {
+                    if snake_index == owner_index || !self.snakes[snake_index].alive {
+                        continue;
+                    }
+
+                    if seg_index == 0 {
+                        let victim_len = self.snakes[snake_index].len();
+                        self.snakes[snake_index].alive = false;
+                        self.snakes[owner_index].pending_growth += victim_len;
+                    } else {
+                        let victim_len = self.snakes[snake_index].len();
+                        let kept_len = seg_index.saturating_sub(1);
+                        let eaten_amount = victim_len.saturating_sub(kept_len);
+                        self.snakes[snake_index].body.truncate(kept_len);
+                        if self.snakes[snake_index].body.is_empty() {
+                            self.snakes[snake_index].alive = false;
+                        }
+                        self.snakes[owner_index].pending_growth += eaten_amount;
+                    }
+                }
+            }
+
+            if !had_overlap {
+                break;
+            }
+        }
+    }
+}
