@@ -260,7 +260,7 @@ impl Game {
             self.render()?;
 
             let elapsed = frame_start.elapsed();
-            let tick = Duration::from_millis(self.settings.tick_ms);
+            let tick = self.current_tick_duration();
             if elapsed < tick {
                 thread::sleep(tick - elapsed);
             }
@@ -285,6 +285,17 @@ impl Game {
         self.settings
             .game_time_seconds
             .saturating_sub(self.elapsed_seconds())
+    }
+
+    fn current_tick_duration(&self) -> Duration {
+        let base = self.settings.tick_ms;
+        let min_tick = ((base as f32) * 0.55) as u64;
+        let player_len = self.player().map_or(3usize, |p| p.len());
+        let growth = player_len.saturating_sub(3) as u64;
+        // Increase speed slowly: reduce 1ms every 2 growth points.
+        let reduction = growth / 2;
+        let tick_ms = base.saturating_sub(reduction).max(min_tick);
+        Duration::from_millis(tick_ms)
     }
 
     fn player(&self) -> Option<&Snake> {
