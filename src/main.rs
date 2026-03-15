@@ -8,6 +8,7 @@ use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::execute;
 use crossterm::queue;
+use crossterm::style::{Color, ResetColor, SetForegroundColor};
 use crossterm::terminal::{
     BeginSynchronizedUpdate, Clear, ClearType, EndSynchronizedUpdate, EnterAlternateScreen,
     LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -72,6 +73,13 @@ struct Snake {
     is_player: bool,
     alive: bool,
     symbol: char,
+    color: Color,
+}
+
+#[derive(Clone, Copy)]
+struct Cell {
+    ch: char,
+    color: Option<Color>,
 }
 
 #[derive(Clone, Copy)]
@@ -317,6 +325,7 @@ impl Game {
             Direction::Right,
             true,
             '@',
+            Color::Cyan,
         ));
 
         let bot_count = self.settings.bot_count.min(MAX_BOTS);
@@ -332,6 +341,7 @@ impl Game {
                 Direction::Left,
                 false,
                 symbol,
+                bot_color(i),
             ));
         }
 
@@ -837,20 +847,38 @@ impl Game {
 
         let player_score = self.player().map_or(0, |p| p.len());
         let alive_snakes = self.snakes.iter().filter(|s| s.alive).count();
-        let mut lines = Vec::new();
-        lines.push(format!(
+        let mut line = 0u16;
+        queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+        write!(
+            out,
             "Snake IO (Rust) [{}]  Score: {player_score}  High Score: {}  Time Left: {}s  Alive Snakes: {alive_snakes}",
             self.settings.label(),
             self.high_score,
             self.remaining_seconds()
-        ));
-        lines.push("Controls: Arrow keys move | Q or Esc quit".to_string());
+        )?;
+        line += 1;
 
-        let mut grid = vec![vec![' '; WIDTH as usize]; HEIGHT as usize];
+        queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+        write!(out, "Controls: Arrow keys move | Q or Esc quit")?;
+        line += 1;
+
+        let mut grid = vec![
+            vec![
+                Cell {
+                    ch: ' ',
+                    color: None,
+                };
+                WIDTH as usize
+            ];
+            HEIGHT as usize
+        ];
 
         for fruit in &self.fruits {
             if in_bounds(*fruit) {
-                grid[fruit.y as usize][fruit.x as usize] = '*';
+                grid[fruit.y as usize][fruit.x as usize] = Cell {
+                    ch: '*',
+                    color: Some(Color::Yellow),
+                };
             }
         }
 
@@ -859,40 +887,51 @@ impl Game {
                 if !in_bounds(seg) {
                     continue;
                 }
-                grid[seg.y as usize][seg.x as usize] = if i == 0 { snake.symbol } else { 'o' };
+                grid[seg.y as usize][seg.x as usize] = Cell {
+                    ch: if i == 0 { snake.symbol } else { 'o' },
+                    color: Some(snake.color),
+                };
             }
         }
 
-        lines.push(format!("+{}+", "-".repeat(WIDTH as usize)));
+        queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+        write!(out, "+{}+", "-".repeat(WIDTH as usize))?;
+        line += 1;
+
         for row in &grid {
-            let mut row_text = String::with_capacity(WIDTH as usize + 2);
-            row_text.push('|');
+            queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+            write!(out, "|")?;
             for c in row {
-                row_text.push(*c);
+                if let Some(color) = c.color {
+                    queue!(out, SetForegroundColor(color))?;
+                    write!(out, "{}", c.ch)?;
+                    queue!(out, ResetColor)?;
+                } else {
+                    write!(out, "{}", c.ch)?;
+                }
             }
-            row_text.push('|');
-            lines.push(row_text);
+            write!(out, "|")?;
+            line += 1;
         }
-        lines.push(format!("+{}+", "-".repeat(WIDTH as usize)));
+
+        queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+        write!(out, "+{}+", "-".repeat(WIDTH as usize))?;
+        line += 1;
 
         for snake in &self.snakes {
             let status = if snake.alive { "alive" } else { "out" };
-            lines.push(format!(
+            queue!(out, MoveTo(0, line), Clear(ClearType::CurrentLine))?;
+            queue!(out, SetForegroundColor(snake.color))?;
+            write!(
+                out,
                 "#{} {} [{}]: {} ({status})",
                 snake.id,
                 snake.name,
                 snake.symbol,
                 snake.len()
-            ));
-        }
-
-        for (i, line) in lines.iter().enumerate() {
-            queue!(
-                out,
-                MoveTo(0, i as u16),
-                Clear(ClearType::CurrentLine)
             )?;
-            write!(out, "{line}")?;
+            queue!(out, ResetColor)?;
+            line += 1;
         }
 
         queue!(out, EndSynchronizedUpdate)?;
@@ -931,7 +970,9 @@ impl Game {
         writeln!(out)?;
         writeln!(out, "Final Standings:")?;
         for snake in &self.snakes {
+            queue!(out, SetForegroundColor(snake.color))?;
             writeln!(out, "- #{} {}: {}", snake.id, snake.name, snake.len())?;
+            queue!(out, ResetColor)?;
         }
         writeln!(out)?;
         writeln!(out, "Press R to replay | M for menu | Q to quit")?;
@@ -998,6 +1039,7 @@ fn make_snake(
     dir: Direction,
     is_player: bool,
     symbol: char,
+    color: Color,
 ) -> Snake {
     let mut body = VecDeque::new();
     body.push_back(start);
@@ -1014,5 +1056,17 @@ fn make_snake(
         is_player,
         alive: true,
         symbol,
+        color,
+    }
+}
+
+fn bot_color(index: usize) -> Color {
+    match index % 6 {
+        0 => Color::Red,
+        1 => Color::Green,
+        2 => Color::Magenta,
+        3 => Color::Blue,
+        4 => Color::DarkYellow,
+        _ => Color::DarkCyan,
     }
 }
