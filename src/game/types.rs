@@ -52,7 +52,6 @@ impl Direction {
 
 pub(crate) struct Snake {
     pub(crate) id: usize,
-    pub(crate) name: String,
     pub(crate) body: VecDeque<Point>,
     pub(crate) dir: Direction,
     pub(crate) next_dir: Direction,
@@ -60,7 +59,6 @@ pub(crate) struct Snake {
     pub(crate) is_player: bool,
     pub(crate) alive: bool,
     pub(crate) eliminated_at: Option<u64>,
-    pub(crate) symbol: char,
     pub(crate) color: Color,
 }
 
@@ -93,12 +91,6 @@ impl Snake {
             }
         }
     }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct Cell {
-    pub(crate) ch: char,
-    pub(crate) color: Option<Color>,
 }
 
 #[derive(Clone, Copy)]
@@ -159,17 +151,6 @@ impl Difficulty {
     }
 }
 
-pub(crate) enum PostGameAction {
-    Replay,
-    Menu,
-    Quit,
-}
-
-pub(crate) struct RoundSummary {
-    pub(crate) winner: String,
-    pub(crate) end_reason: String,
-}
-
 pub(crate) fn in_bounds(p: Point) -> bool {
     p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT
 }
@@ -180,11 +161,9 @@ pub(crate) fn manhattan(a: Point, b: Point) -> i32 {
 
 pub(crate) fn make_snake(
     id: usize,
-    name: &str,
     start: Point,
     dir: Direction,
     is_player: bool,
-    symbol: char,
     color: Color,
 ) -> Snake {
     let mut body = VecDeque::new();
@@ -194,7 +173,6 @@ pub(crate) fn make_snake(
 
     Snake {
         id,
-        name: name.to_string(),
         body,
         dir,
         next_dir: dir,
@@ -202,7 +180,6 @@ pub(crate) fn make_snake(
         is_player,
         alive: true,
         eliminated_at: None,
-        symbol,
         color,
     }
 }

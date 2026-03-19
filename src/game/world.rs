@@ -1,24 +1,19 @@
-use std::time::Duration;
-
-use crossterm::event::{self, Event, KeyCode};
 use crossterm::style::Color;
 use rand::Rng;
 
 use crate::game::core::Game;
-use crate::game::types::{Direction, MAX_BOTS, Point, Snake, WIDTH, HEIGHT, bot_color, make_snake};
+use crate::game::types::{Direction, MAX_BOTS, Point, WIDTH, HEIGHT, bot_color, make_snake};
 
 impl Game {
     pub(crate) fn spawn_snakes(&mut self) {
         self.snakes.push(make_snake(
             0,
-            "Player",
             Point {
                 x: WIDTH / 4,
                 y: HEIGHT / 2,
             },
             Direction::Right,
             true,
-            '@',
             Color::Cyan,
         ));
 
@@ -31,53 +26,16 @@ impl Game {
             } else {
                 WIDTH * 3 / 4 + 1
             };
-            let symbol = char::from_u32('A' as u32 + i as u32).unwrap_or('B');
             self.snakes.push(make_snake(
                 i + 1,
-                &format!("Bot {}", i + 1),
                 Point { x, y },
                 Direction::Left,
                 false,
-                symbol,
                 bot_color(i),
             ));
         }
 
         self.update_high_score();
-    }
-
-    pub(crate) fn process_input(&mut self) -> std::io::Result<()> {
-        while event::poll(Duration::from_millis(0))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Up => {
-                        if let Some(p) = self.player_mut() {
-                            p.set_direction(Direction::Up);
-                        }
-                    }
-                    KeyCode::Down => {
-                        if let Some(p) = self.player_mut() {
-                            p.set_direction(Direction::Down);
-                        }
-                    }
-                    KeyCode::Left => {
-                        if let Some(p) = self.player_mut() {
-                            p.set_direction(Direction::Left);
-                        }
-                    }
-                    KeyCode::Right => {
-                        if let Some(p) = self.player_mut() {
-                            p.set_direction(Direction::Right);
-                        }
-                    }
-                    KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('Q') => {
-                        self.quit_requested = true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(())
     }
 
     pub(crate) fn move_snakes(&mut self) {
