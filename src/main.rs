@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use game::types::{Difficulty, Direction};
 use game::core::Game;
 
-const CELL_SIZE: f32 = 20.0;
-const HUD_HEIGHT: f32 = 86.0;
+const CELL_SIZE: f32 = 14.0;
+const SIDE_PANEL_WIDTH: f32 = 290.0;
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 enum GameState {
@@ -44,7 +44,7 @@ struct Fruit;
 struct UIText;
 
 #[derive(Component)]
-struct BoardBackground;
+struct BoardDecor;
 
 #[derive(Component)]
 struct MenuUI;
@@ -81,23 +81,45 @@ fn setup_camera(mut commands: Commands) {
 }
 
 fn spawn_menu_ui(mut commands: Commands) {
-    commands.spawn((
-        TextBundle::from_section(
-            "SNAKE IO\n\nPress 1: Easy\nPress 2: Normal\nPress 3: Hard\n\nMove: Arrow Keys\nQuit: Q or Esc",
-            TextStyle {
-                font_size: 34.0,
-                color: Color::srgb(0.95, 0.95, 0.95),
-                font: default(),
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                background_color: BackgroundColor(Color::srgba(0.02, 0.04, 0.07, 0.58)),
+                ..default()
             },
-        )
-        .with_style(Style {
-            position_type: PositionType::Absolute,
-            left: Val::Px(40.0),
-            top: Val::Px(40.0),
-            ..default()
-        }),
-        MenuUI,
-    ));
+            MenuUI,
+        ))
+        .with_children(|parent| {
+            parent.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Px(540.0),
+                    padding: UiRect::all(Val::Px(24.0)),
+                    ..default()
+                },
+                background_color: BackgroundColor(Color::srgba(0.07, 0.11, 0.16, 0.86)),
+                ..default()
+            })
+            .with_children(|card| {
+                card.spawn(TextBundle::from_section(
+                    "SNAKE IO\n\nPress 1: Easy\nPress 2: Normal\nPress 3: Hard\n\nMove: Arrow Keys\nQuit: Q or Esc",
+                    TextStyle {
+                        font_size: 34.0,
+                        color: Color::srgb(0.95, 0.95, 0.95),
+                        font: default(),
+                    },
+                ));
+            });
+        });
 }
 
 fn cleanup_menu_ui(mut commands: Commands, menu: Query<Entity, With<MenuUI>>) {
@@ -207,12 +229,12 @@ fn game_update(
 fn render_game(
     game_data: Res<GameData>,
     mut commands: Commands,
-    board_background: Query<Entity, With<BoardBackground>>,
+    board_decor: Query<Entity, With<BoardDecor>>,
     snake_segments: Query<Entity, With<SnakeSegment>>,
     fruits: Query<Entity, With<Fruit>>,
     ui_texts: Query<Entity, With<UIText>>,
 ) {
-    for entity in &board_background {
+    for entity in &board_decor {
         commands.entity(entity).despawn();
     }
 
@@ -233,26 +255,118 @@ fn render_game(
             let game_height = game::types::HEIGHT as f32;
             let offset_x = -(game_width * CELL_SIZE) / 2.0;
             let offset_y = (game_height * CELL_SIZE) / 2.0;
-            let board_y_shift = -HUD_HEIGHT * 0.35;
+            let board_x_shift = -SIDE_PANEL_WIDTH * 0.45;
 
             commands.spawn((
                 SpriteBundle {
                     sprite: Sprite {
-                        color: Color::srgb(0.12, 0.16, 0.20),
+                        color: Color::srgb(0.11, 0.15, 0.19),
                         custom_size: Some(Vec2::new(game_width * CELL_SIZE, game_height * CELL_SIZE)),
                         ..default()
                     },
-                    transform: Transform::from_translation(Vec3::new(0.0, board_y_shift, -0.5)),
+                    transform: Transform::from_translation(Vec3::new(board_x_shift, 0.0, -0.5)),
                     ..default()
                 },
-                BoardBackground,
+                BoardDecor,
             ));
+
+            // Framed board border.
+            let board_w = game_width * CELL_SIZE;
+            let board_h = game_height * CELL_SIZE;
+            let border_color = Color::srgb(0.34, 0.54, 0.70);
+            let border_thickness = 2.0;
+            let half_w = board_w / 2.0;
+            let half_h = board_h / 2.0;
+            let bx = board_x_shift;
+
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: border_color,
+                        custom_size: Some(Vec2::new(board_w + border_thickness * 2.0, border_thickness)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(bx, half_h + border_thickness / 2.0, -0.2)),
+                    ..default()
+                },
+                BoardDecor,
+            ));
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: border_color,
+                        custom_size: Some(Vec2::new(board_w + border_thickness * 2.0, border_thickness)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(bx, -half_h - border_thickness / 2.0, -0.2)),
+                    ..default()
+                },
+                BoardDecor,
+            ));
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: border_color,
+                        custom_size: Some(Vec2::new(border_thickness, board_h + border_thickness * 2.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(bx - half_w - border_thickness / 2.0, 0.0, -0.2)),
+                    ..default()
+                },
+                BoardDecor,
+            ));
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: border_color,
+                        custom_size: Some(Vec2::new(border_thickness, board_h + border_thickness * 2.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(bx + half_w + border_thickness / 2.0, 0.0, -0.2)),
+                    ..default()
+                },
+                BoardDecor,
+            ));
+
+            // Subtle vertical grid lines.
+            for gx in 1..(game::types::WIDTH as usize) {
+                let x = offset_x + gx as f32 * CELL_SIZE + board_x_shift;
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::srgba(0.70, 0.82, 0.92, 0.07),
+                            custom_size: Some(Vec2::new(1.0, board_h)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(Vec3::new(x, 0.0, -0.3)),
+                        ..default()
+                    },
+                    BoardDecor,
+                ));
+            }
+
+            // Subtle horizontal grid lines.
+            for gy in 1..(game::types::HEIGHT as usize) {
+                let y = offset_y - gy as f32 * CELL_SIZE;
+                commands.spawn((
+                    SpriteBundle {
+                        sprite: Sprite {
+                            color: Color::srgba(0.70, 0.82, 0.92, 0.07),
+                            custom_size: Some(Vec2::new(board_w, 1.0)),
+                            ..default()
+                        },
+                        transform: Transform::from_translation(Vec3::new(board_x_shift, y, -0.3)),
+                        ..default()
+                    },
+                    BoardDecor,
+                ));
+            }
 
             // Render fruits
             for fruit in &game.fruits {
                 if game::types::in_bounds(*fruit) {
-                    let x = offset_x + fruit.x as f32 * CELL_SIZE + CELL_SIZE / 2.0;
-                    let y = offset_y - fruit.y as f32 * CELL_SIZE - CELL_SIZE / 2.0 + board_y_shift;
+                    let x = offset_x + fruit.x as f32 * CELL_SIZE + CELL_SIZE / 2.0 + board_x_shift;
+                    let y = offset_y - fruit.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
@@ -275,8 +389,8 @@ fn render_game(
                         continue;
                     }
                     
-                    let x = offset_x + segment.x as f32 * CELL_SIZE + CELL_SIZE / 2.0;
-                    let y = offset_y - segment.y as f32 * CELL_SIZE - CELL_SIZE / 2.0 + board_y_shift;
+                    let x = offset_x + segment.x as f32 * CELL_SIZE + CELL_SIZE / 2.0 + board_x_shift;
+                    let y = offset_y - segment.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
                     
                     let color = match snake.color {
                         crossterm::style::Color::Red => Color::srgb(1.0, 0.0, 0.0),
@@ -314,13 +428,13 @@ fn render_game(
                 NodeBundle {
                     style: Style {
                         position_type: PositionType::Absolute,
-                        left: Val::Px(0.0),
+                        right: Val::Px(0.0),
                         top: Val::Px(0.0),
-                        width: Val::Percent(100.0),
-                        height: Val::Px(HUD_HEIGHT),
+                        width: Val::Px(SIDE_PANEL_WIDTH),
+                        height: Val::Percent(100.0),
                         ..default()
                     },
-                    background_color: BackgroundColor(Color::srgba(0.02, 0.04, 0.07, 0.92)),
+                    background_color: BackgroundColor(Color::srgba(0.03, 0.06, 0.09, 0.94)),
                     ..default()
                 },
                 UIText,
@@ -329,7 +443,7 @@ fn render_game(
             commands.spawn((
                 TextBundle::from_section(
                     format!(
-                        "Snake IO [{}]   Score {}   High {}   Time {}s   Snakes {}",
+                        "SNAKE IO\n\nMode: {}\nScore: {}\nHigh Score: {}\nTime Left: {}s\nAlive: {}",
                         game.settings.label(),
                         player_score,
                         game.high_score,
@@ -344,8 +458,8 @@ fn render_game(
                 )
                 .with_style(Style {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(22.0),
-                    top: Val::Px(16.0),
+                    right: Val::Px(26.0),
+                    top: Val::Px(26.0),
                     ..default()
                 }),
                 UIText,
@@ -353,17 +467,17 @@ fn render_game(
             
             commands.spawn((
                 TextBundle::from_section(
-                    "Controls: Arrow keys move   |   Q / Esc quit",
+                    "Controls\nArrow keys: Move\nQ / Esc: Exit round",
                     TextStyle {
-                        font_size: 15.0,
+                        font_size: 16.0,
                         color: Color::srgb(0.72, 0.86, 1.0),
                         font: default(),
                     },
                 )
                 .with_style(Style {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(22.0),
-                    top: Val::Px(49.0),
+                    right: Val::Px(26.0),
+                    bottom: Val::Px(28.0),
                     ..default()
                 }),
                 UIText,
@@ -372,8 +486,28 @@ fn render_game(
     }
 }
 
-fn cleanup_game(mut game_data: ResMut<GameData>) {
+fn cleanup_game(
+    mut commands: Commands,
+    mut game_data: ResMut<GameData>,
+    board_decor: Query<Entity, With<BoardDecor>>,
+    snake_segments: Query<Entity, With<SnakeSegment>>,
+    fruits: Query<Entity, With<Fruit>>,
+    ui_texts: Query<Entity, With<UIText>>,
+) {
     if let Ok(mut game) = game_data.game.lock() {
         *game = None;
+    }
+
+    for entity in &board_decor {
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in &snake_segments {
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in &fruits {
+        commands.entity(entity).despawn_recursive();
+    }
+    for entity in &ui_texts {
+        commands.entity(entity).despawn_recursive();
     }
 }
