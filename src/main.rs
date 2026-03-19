@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use game::types::{Difficulty, Direction};
 use game::core::Game;
 
-const CELL_SIZE: f32 = 25.0;
+const CELL_SIZE: f32 = 20.0;
+const HUD_HEIGHT: f32 = 86.0;
 
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 enum GameState {
@@ -232,6 +233,7 @@ fn render_game(
             let game_height = game::types::HEIGHT as f32;
             let offset_x = -(game_width * CELL_SIZE) / 2.0;
             let offset_y = (game_height * CELL_SIZE) / 2.0;
+            let board_y_shift = -HUD_HEIGHT * 0.35;
 
             commands.spawn((
                 SpriteBundle {
@@ -240,7 +242,7 @@ fn render_game(
                         custom_size: Some(Vec2::new(game_width * CELL_SIZE, game_height * CELL_SIZE)),
                         ..default()
                     },
-                    transform: Transform::from_translation(Vec3::new(0.0, 0.0, -0.5)),
+                    transform: Transform::from_translation(Vec3::new(0.0, board_y_shift, -0.5)),
                     ..default()
                 },
                 BoardBackground,
@@ -250,7 +252,7 @@ fn render_game(
             for fruit in &game.fruits {
                 if game::types::in_bounds(*fruit) {
                     let x = offset_x + fruit.x as f32 * CELL_SIZE + CELL_SIZE / 2.0;
-                    let y = offset_y - fruit.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
+                    let y = offset_y - fruit.y as f32 * CELL_SIZE - CELL_SIZE / 2.0 + board_y_shift;
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
@@ -274,7 +276,7 @@ fn render_game(
                     }
                     
                     let x = offset_x + segment.x as f32 * CELL_SIZE + CELL_SIZE / 2.0;
-                    let y = offset_y - segment.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
+                    let y = offset_y - segment.y as f32 * CELL_SIZE - CELL_SIZE / 2.0 + board_y_shift;
                     
                     let color = match snake.color {
                         crossterm::style::Color::Red => Color::srgb(1.0, 0.0, 0.0),
@@ -307,11 +309,27 @@ fn render_game(
             // Render UI text
             let player_score = game.player().map_or(0, |p: &_| p.len());
             let alive_snakes = game.snakes.iter().filter(|s| s.alive).count();
+
+            commands.spawn((
+                NodeBundle {
+                    style: Style {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(0.0),
+                        top: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        height: Val::Px(HUD_HEIGHT),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(Color::srgba(0.02, 0.04, 0.07, 0.92)),
+                    ..default()
+                },
+                UIText,
+            ));
             
             commands.spawn((
                 TextBundle::from_section(
                     format!(
-                        "Snake IO [{}]  Score: {}  High: {}  Time: {}s  Snakes: {}",
+                        "Snake IO [{}]   Score {}   High {}   Time {}s   Snakes {}",
                         game.settings.label(),
                         player_score,
                         game.high_score,
@@ -326,8 +344,8 @@ fn render_game(
                 )
                 .with_style(Style {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(14.0),
-                    top: Val::Px(10.0),
+                    left: Val::Px(22.0),
+                    top: Val::Px(16.0),
                     ..default()
                 }),
                 UIText,
@@ -335,17 +353,17 @@ fn render_game(
             
             commands.spawn((
                 TextBundle::from_section(
-                    "Arrow keys: move | Q: quit",
+                    "Controls: Arrow keys move   |   Q / Esc quit",
                     TextStyle {
-                        font_size: 16.0,
-                        color: Color::WHITE,
+                        font_size: 15.0,
+                        color: Color::srgb(0.72, 0.86, 1.0),
                         font: default(),
                     },
                 )
                 .with_style(Style {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(14.0),
-                    top: Val::Px(36.0),
+                    left: Val::Px(22.0),
+                    top: Val::Px(49.0),
                     ..default()
                 }),
                 UIText,
