@@ -30,6 +30,24 @@ pub(crate) enum Direction {
     Right,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum BotPersona {
+    Aggressive,
+    Scavenger,
+    Evasive,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum DeathCause {
+    Wall,
+    SelfCollision,
+    HeadToHead,
+    EatenBySnake,
+    TimeUp,
+    Quit,
+    Unknown,
+}
+
 impl Direction {
     pub(crate) fn delta(self) -> (i32, i32) {
         match self {
@@ -176,6 +194,7 @@ pub(crate) struct Snake {
     #[allow(dead_code)]
     pub(crate) color: Color,
     pub(crate) skin: Skin,
+    pub(crate) persona: Option<BotPersona>,
 }
 
 impl Snake {
@@ -224,6 +243,7 @@ pub(crate) struct GameSettings {
     pub(crate) tick_ms: u64,
     pub(crate) game_time_seconds: u64,
     pub(crate) bot_aggression: f32,
+    pub(crate) sprint_ms: u64,
 }
 
 impl GameSettings {
@@ -246,6 +266,7 @@ impl Difficulty {
                 tick_ms: 145,
                 game_time_seconds: 75,
                 bot_aggression: 0.55,
+                sprint_ms: 1400,
             },
             Difficulty::Normal => GameSettings {
                 difficulty: self,
@@ -254,6 +275,7 @@ impl Difficulty {
                 tick_ms: 120,
                 game_time_seconds: 90,
                 bot_aggression: 0.85,
+                sprint_ms: 1100,
             },
             Difficulty::Hard => GameSettings {
                 difficulty: self,
@@ -262,6 +284,7 @@ impl Difficulty {
                 tick_ms: 95,
                 game_time_seconds: 100,
                 bot_aggression: 1.25,
+                sprint_ms: 900,
             },
         }
     }
@@ -300,6 +323,7 @@ pub(crate) fn make_snake(
         eliminated_at: None,
         color,
         skin,
+        persona: None,
     }
 }
 

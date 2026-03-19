@@ -334,6 +334,10 @@ fn spawn_menu_ui_does_not_show_results_panel() {
             score: 12,
             alive: true,
         }],
+        player_death_cause: None,
+        best_combo: 3,
+        near_miss_bonus: 1,
+        quest_completed: false,
     });
 
     app.update();
@@ -379,13 +383,13 @@ fn spawn_menu_ui_contains_controls_and_objective_text() {
                 if value.contains("GAMEPLAY CONTROLS") {
                     found_controls_heading = true;
                 }
-                if value.contains("Arrow Keys") && value.contains("Q or ESC") {
+                if value.contains("Arrow/WASD") && value.contains("Q or ESC") {
                     found_controls_details = true;
                 }
                 if value.contains("OBJECTIVE") {
                     found_objective_heading = true;
                 }
-                if value.contains("Eat fruit to grow longer")
+                if value.contains("Eat fruit to grow")
                     && value.contains("Be the last snake standing")
                 {
                     found_objective_details = true;
@@ -428,6 +432,10 @@ fn format_last_results_renders_placeholder_and_rankings() {
                 alive: false,
             },
         ],
+        player_death_cause: None,
+        best_combo: 5,
+        near_miss_bonus: 2,
+        quest_completed: true,
     };
 
     let rendered = format_last_results(Some(&data));

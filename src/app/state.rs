@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use bevy::prelude::*;
 
 use crate::game::core::Game;
-use crate::game::types::Difficulty;
+use crate::game::types::{DeathCause, Difficulty};
 
 /// Visual size of a single board cell in world-space pixels.
 pub const CELL_SIZE: f32 = 14.0;
@@ -49,6 +49,40 @@ pub struct LastRoundResults {
     pub time_left: u64,
     /// Ranked entries including player and bots.
     pub entries: Vec<RoundRankEntry>,
+    /// Player death reason for actionable retry tips.
+    pub player_death_cause: Option<DeathCause>,
+    /// Fruit streak count reached during the round.
+    pub best_combo: usize,
+    /// Near-miss bonus moments.
+    pub near_miss_bonus: usize,
+    /// True when session quest was completed.
+    pub quest_completed: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct AccessibilitySettings {
+    pub colorblind_mode: bool,
+    pub reduced_motion: bool,
+    pub reduced_audio: bool,
+}
+
+impl Default for AccessibilitySettings {
+    fn default() -> Self {
+        Self {
+            colorblind_mode: false,
+            reduced_motion: false,
+            reduced_audio: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MetaProgress {
+    pub runs_completed: usize,
+    pub total_quest_completions: usize,
+    pub unlocked_trails: usize,
+    pub daily_best_score: usize,
+    pub daily_seed_label: String,
 }
 
 /// Runtime resource containing active game model and player configuration.
@@ -62,6 +96,14 @@ pub struct GameData {
     pub last_update: f64,
     /// Results from the previous finished round, displayed in the menu.
     pub last_results: Option<LastRoundResults>,
+    /// First-run helper for tutorial and gentle ramp.
+    pub first_run: bool,
+    /// Lightweight accessibility profile.
+    pub accessibility: AccessibilitySettings,
+    /// Long-term progression in current app session.
+    pub meta_progress: MetaProgress,
+    /// Short lived contextual tip shown in HUD.
+    pub contextual_tip: String,
 }
 
 impl Default for GameData {
@@ -71,6 +113,10 @@ impl Default for GameData {
             selected_difficulty: Difficulty::Normal,
             last_update: 0.0,
             last_results: None,
+            first_run: true,
+            accessibility: AccessibilitySettings::default(),
+            meta_progress: MetaProgress::default(),
+            contextual_tip: "Collect fruit quickly to build combo.".to_string(),
         }
     }
 }

@@ -1,8 +1,11 @@
 use crossterm::style::Color;
 use rand::Rng;
+use std::time::{Duration, Instant};
 
 use crate::game::core::Game;
-use crate::game::types::{bot_color, make_snake, Direction, Point, HEIGHT, MAX_BOTS, WIDTH};
+use crate::game::types::{
+    bot_color, make_snake, BotPersona, Direction, Point, HEIGHT, MAX_BOTS, WIDTH,
+};
 
 impl Game {
     pub(crate) fn spawn_snakes(&mut self) {
@@ -26,13 +29,19 @@ impl Game {
             } else {
                 WIDTH * 3 / 4 + 1
             };
-            self.snakes.push(make_snake(
+            let mut bot = make_snake(
                 i + 1,
                 Point { x, y },
                 Direction::Left,
                 false,
                 bot_color(i),
-            ));
+            );
+            bot.persona = Some(match i % 3 {
+                0 => BotPersona::Aggressive,
+                1 => BotPersona::Scavenger,
+                _ => BotPersona::Evasive,
+            });
+            self.snakes.push(bot);
         }
 
         self.update_high_score();
@@ -46,13 +55,42 @@ impl Game {
 
     pub(crate) fn resolve_fruit_eating(&mut self) {
         let mut consumed = Vec::new();
+        let now = Instant::now();
         for (fi, fruit) in self.fruits.iter().copied().enumerate() {
             for snake in &mut self.snakes {
                 if !snake.alive {
                     continue;
                 }
                 if snake.head().is_some_and(|h| h == fruit) {
-                    snake.pending_growth += 1;
+                    let in_danger_zone = self
+                        .danger_zone_center
+                        .is_some_and(|center| (center.x - fruit.x).abs() <= 2 && (center.y - fruit.y).abs() <= 2);
+                    let zone_bonus = if in_danger_zone { 2 } else { 0 };
+
+                    snake.pending_growth += 1 + zone_bonus;
+
+                    if snake.is_player {
+                        self.total_fruits_eaten += 1;
+                        let chain_open = self.combo_until.is_some_and(|until| until > now);
+                        if chain_open {
+                            self.combo_count += 1;
+                        } else {
+                            self.combo_count = 1;
+                        }
+                        self.combo_until = Some(now + Duration::from_millis(2600));
+                        if self.combo_count >= 3 {
+                            snake.pending_growth += 1;
+                        }
+                        if self.combo_count >= 5 {
+                            self.near_miss_bonus += 1;
+                        }
+
+                        // Magnet pulse every 12 fruits to create clutch comebacks.
+                        if self.total_fruits_eaten % 12 == 0 {
+                            self.magnet_until = Some(now + Duration::from_millis(5000));
+                        }
+                    }
+
                     consumed.push(fi);
                     break;
                 }
@@ -64,9 +102,39 @@ impl Game {
         while let Some(index) = consumed.pop() {
             self.fruits.remove(index);
         }
+
+        // Magnet effect: pull nearby fruits into the player if close enough.
+        if self.magnet_active() {
+            if let Some(player_head) = self.player().and_then(|p| p.head()) {
+                let mut extra_consumed = Vec::new();
+                for (idx, fruit) in self.fruits.iter().copied().enumerate() {
+                    let d = (player_head.x - fruit.x).abs() + (player_head.y - fruit.y).abs();
+                    if d <= 2 {
+                        extra_consumed.push(idx);
+                    }
+                }
+
+                let extra_count = extra_consumed.len();
+                if let Some(player) = self.player_mut() {
+                    player.pending_growth += extra_count;
+                }
+                self.total_fruits_eaten += extra_count;
+
+                extra_consumed.sort_unstable();
+                extra_consumed.dedup();
+                while let Some(index) = extra_consumed.pop() {
+                    self.fruits.remove(index);
+                }
+            }
+        }
     }
 
     pub(crate) fn refill_fruits(&mut self) {
+        if self.danger_zone_center.is_none() && self.elapsed_seconds() >= 15 {
+            self.danger_zone_center = self.random_empty_cell();
+            self.danger_zone_until = Some(Instant::now() + Duration::from_secs(12));
+        }
+
         while self.fruits.len() < self.settings.fruit_count {
             if let Some(p) = self.random_empty_cell() {
                 self.fruits.push(p);
@@ -89,6 +157,11 @@ impl Game {
                 y: self.rng.gen_range(0..HEIGHT),
             };
 
+            // Anti-trap spawning: avoid edges and very crowded neighborhoods.
+            if p.x <= 1 || p.x >= WIDTH - 2 || p.y <= 1 || p.y >= HEIGHT - 2 {
+                continue;
+            }
+
             if self.fruits.contains(&p) {
                 continue;
             }
@@ -99,6 +172,31 @@ impl Game {
                 .filter(|s| s.alive)
                 .any(|s| s.body.iter().any(|seg| *seg == p))
             {
+                continue;
+            }
+
+            let mut nearby_occupied = 0;
+            for dx in -2..=2 {
+                for dy in -2..=2 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let q = Point {
+                        x: p.x + dx,
+                        y: p.y + dy,
+                    };
+                    if self
+                        .snakes
+                        .iter()
+                        .filter(|s| s.alive)
+                        .any(|s| s.body.iter().any(|seg| *seg == q))
+                    {
+                        nearby_occupied += 1;
+                    }
+                }
+            }
+
+            if nearby_occupied > 8 {
                 continue;
             }
 
@@ -127,6 +225,7 @@ mod tests {
             tick_ms: 120,
             game_time_seconds: 90,
             bot_aggression: 0.85,
+            sprint_ms: 1100,
         }
     }
 
@@ -139,6 +238,20 @@ mod tests {
             start: Instant::now(),
             high_score: 0,
             quit_requested: false,
+            paused: false,
+            sprint_until: None,
+            sprint_cooldown_until: None,
+            combo_count: 0,
+            combo_until: None,
+            near_miss_bonus: 0,
+            total_fruits_eaten: 0,
+            magnet_until: None,
+            danger_zone_center: None,
+            danger_zone_until: None,
+            player_death_cause: None,
+            quest: crate::game::core::ActiveQuest { target_fruits: 30 },
+            quest_complete: false,
+            daily_seed: 0,
         }
     }
 
@@ -191,6 +304,7 @@ mod tests {
             eliminated_at: None,
             color: Color::Cyan,
             skin: crate::game::types::generate_skin(0, true, 0),
+            persona: None,
         }];
 
         game.update_high_score();

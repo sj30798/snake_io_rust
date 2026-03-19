@@ -28,6 +28,14 @@ fn rgb_to_bevy_color(rgb: RGB) -> Color {
     Color::srgb(rgb.r, rgb.g, rgb.b)
 }
 
+fn colorblind_adjust(c: Color) -> Color {
+    let srgba = c.to_srgba();
+    let r = (srgba.red * 0.65 + srgba.green * 0.35).min(1.0);
+    let g = (srgba.green * 0.70 + srgba.blue * 0.30).min(1.0);
+    let b = (srgba.blue * 0.40 + srgba.red * 0.20).min(1.0);
+    Color::srgba(r, g, b, srgba.alpha)
+}
+
 /// Calculates segment color based on skin pattern and position
 fn calculate_segment_color(
     rgb: RGB,
@@ -111,6 +119,8 @@ pub fn render_game(
 
     if let Ok(game_opt) = game_data.game.lock() {
         if let Some(game) = game_opt.as_ref() {
+            let colorblind = game_data.accessibility.colorblind_mode;
+
             let game_width = crate::game::types::WIDTH as f32;
             let game_height = crate::game::types::HEIGHT as f32;
             let offset_x = -(game_width * CELL_SIZE) / 2.0;
@@ -135,7 +145,10 @@ pub fn render_game(
 
             let board_w = game_width * CELL_SIZE;
             let board_h = game_height * CELL_SIZE;
-            let border_color = Color::srgb(0.34, 0.54, 0.70);
+            let mut border_color = Color::srgb(0.34, 0.54, 0.70);
+            if colorblind {
+                border_color = colorblind_adjust(border_color);
+            }
             let border_thickness = 2.0;
             let half_w = board_w / 2.0;
             let half_h = board_h / 2.0;
@@ -254,10 +267,23 @@ pub fn render_game(
                 if crate::game::types::in_bounds(*fruit) {
                     let x = offset_x + fruit.x as f32 * CELL_SIZE + CELL_SIZE / 2.0 + board_x_shift;
                     let y = offset_y - fruit.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
+
+                    let in_danger_zone = game
+                        .danger_zone_center
+                        .is_some_and(|center| (center.x - fruit.x).abs() <= 2 && (center.y - fruit.y).abs() <= 2);
+                    let mut fruit_color = if in_danger_zone {
+                        Color::srgb(1.0, 0.45, 0.1)
+                    } else {
+                        Color::srgb(1.0, 1.0, 0.0)
+                    };
+                    if colorblind {
+                        fruit_color = colorblind_adjust(fruit_color);
+                    }
+
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
-                                color: Color::srgb(1.0, 1.0, 0.0),
+                                color: fruit_color,
                                 custom_size: Some(Vec2::new(CELL_SIZE - 2.0, CELL_SIZE - 2.0)),
                                 ..default()
                             },
@@ -287,6 +313,7 @@ pub fn render_game(
                         i,
                         is_head,
                     );
+                    let color = if colorblind { colorblind_adjust(color) } else { color };
 
                     let size = if is_head {
                         CELL_SIZE - 2.0
@@ -391,6 +418,30 @@ pub fn render_game(
 
             let player_score = game.player().map_or(0, |p| p.len());
             let alive_snakes = game.snakes.iter().filter(|s| s.alive).count();
+            let sprint_cooldown = game.sprint_cooldown_left_ms() as f32 / 1000.0;
+            let quest_progress = game.total_fruits_eaten.min(game.quest.target_fruits);
+
+            let mut threat = "-".to_string();
+            if let Some(player_head) = game.player().and_then(|p| p.head()) {
+                let nearest = game
+                    .snakes
+                    .iter()
+                    .filter(|s| !s.is_player && s.alive)
+                    .filter_map(|s| s.head())
+                    .min_by_key(|h| (h.x - player_head.x).abs() + (h.y - player_head.y).abs());
+                if let Some(h) = nearest {
+                    let dx = h.x - player_head.x;
+                    let dy = h.y - player_head.y;
+                    threat = if dx.abs() > dy.abs() {
+                        if dx > 0 { "Right" } else { "Left" }
+                    } else if dy != 0 {
+                        if dy > 0 { "Down" } else { "Up" }
+                    } else {
+                        "Center"
+                    }
+                    .to_string();
+                }
+            }
 
             commands.spawn((
                 NodeBundle {
@@ -411,12 +462,20 @@ pub fn render_game(
             commands.spawn((
                 TextBundle::from_section(
                     format!(
-                        "SNAKE IO\n\nMode: {}\nScore: {}\nHigh Score: {}\nTime Left: {}s\nAlive: {}",
+                        "SNAKE IO\n\nMode: {}\nScore: {}\nHigh Score: {}\nTime Left: {}s\nAlive: {}\nCombo: x{}\nNear-Miss Bonus: {}\nSprint CD: {:.1}s\nMagnet: {}\nQuest: {}/{}\nThreat Dir: {}\nDaily Seed: {}",
                         game.settings.label(),
                         player_score,
                         game.high_score,
                         game.remaining_seconds(),
-                        alive_snakes
+                        alive_snakes,
+                        game.combo_count,
+                        game.near_miss_bonus,
+                        sprint_cooldown,
+                        if game.magnet_active() { "ON" } else { "OFF" },
+                        quest_progress,
+                        game.quest.target_fruits,
+                        threat,
+                        game.daily_seed % 10_000,
                     ),
                     TextStyle {
                         font_size: 20.0,
@@ -435,7 +494,13 @@ pub fn render_game(
 
             commands.spawn((
                 TextBundle::from_section(
-                    "Controls\nArrow keys: Move\nQ / Esc: Exit round",
+                    format!(
+                        "Controls\nArrow/WASD: Move\nShift: Sprint burst\nSpace: Manual magnet pulse\nP: Pause\nM: Reduced motion ({})\nC: Colorblind palette ({})\nV: Reduced audio ({})\nQ / Esc: Exit round\n\nTip\n{}",
+                        if game_data.accessibility.reduced_motion { "on" } else { "off" },
+                        if game_data.accessibility.colorblind_mode { "on" } else { "off" },
+                        if game_data.accessibility.reduced_audio { "on" } else { "off" },
+                        game_data.contextual_tip,
+                    ),
                     TextStyle {
                         font_size: 16.0,
                         color: Color::srgb(0.72, 0.86, 1.0),

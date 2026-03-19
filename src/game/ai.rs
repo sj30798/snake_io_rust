@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::game::core::Game;
-use crate::game::types::{manhattan, Direction, Point, HEIGHT, WIDTH};
+use crate::game::types::{manhattan, BotPersona, Direction, Point, HEIGHT, WIDTH};
 
 impl Game {
     pub(crate) fn update_bot_directions(&mut self) {
@@ -78,7 +78,8 @@ impl Game {
         score += 10.0 / (1.0 + manhattan(next, center) as f32);
         // Small deterministic jitter avoids perfectly tied scores without mutating RNG state.
         let jitter_seed = (next.x * 31 + next.y * 17 + snake_index as i32 * 13) as f32;
-        score + jitter_seed.sin().abs() * 0.001
+        let dynamic_scale = 1.0 + (self.elapsed_progress() * 0.35);
+        (score * dynamic_scale) + jitter_seed.sin().abs() * 0.001
     }
 
     fn head_to_head_risk_score(&self, snake_index: usize, next: Point) -> f32 {
@@ -115,6 +116,7 @@ impl Game {
     fn bot_hunt_score(&self, snake_index: usize, next: Point) -> f32 {
         let my_len = self.snakes[snake_index].len() as f32;
         let mut score = 0.0;
+        let persona = self.snakes[snake_index].persona;
 
         for (idx, snake) in self.snakes.iter().enumerate() {
             if idx == snake_index || !snake.alive {
@@ -132,6 +134,12 @@ impl Game {
             } else {
                 score -= 6.0 / (1.0 + distance);
             }
+        }
+
+        if let Some(BotPersona::Aggressive) = persona {
+            score *= 1.24;
+        } else if let Some(BotPersona::Evasive) = persona {
+            score *= 0.74;
         }
 
         score
@@ -181,7 +189,12 @@ impl Game {
                 safe_count += 1.0;
             }
         }
-        safe_count * 4.0
+        let persona = self.snakes[snake_index].persona;
+        if let Some(BotPersona::Evasive) = persona {
+            safe_count * 6.4
+        } else {
+            safe_count * 4.0
+        }
     }
 
     fn bot_can_step_into(&self, snake_index: usize, cell: Point) -> bool {
@@ -224,5 +237,11 @@ impl Game {
             .iter()
             .copied()
             .min_by_key(|fruit| manhattan(from, *fruit))
+    }
+
+    fn elapsed_progress(&self) -> f32 {
+        let elapsed = self.start.elapsed().as_secs_f32();
+        let total = self.settings.game_time_seconds.max(1) as f32;
+        (elapsed / total).clamp(0.0, 1.0)
     }
 }

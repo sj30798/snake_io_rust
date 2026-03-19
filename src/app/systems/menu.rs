@@ -54,7 +54,11 @@ pub fn setup_camera(mut commands: Commands) {
 }
 
 /// Spawns translucent menu overlay and menu card.
-pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub fn spawn_menu_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    game_data: Res<GameData>,
+) {
     commands
         .spawn((
             NodeBundle {
@@ -129,6 +133,25 @@ pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                                 ..default()
                             }),
                         );
+
+                        section.spawn(
+                            TextBundle::from_section(
+                                if game_data.first_run {
+                                    "First run: opening round starts on Easy for onboarding"
+                                } else {
+                                    "Press 1/2/3 to start instantly"
+                                },
+                                TextStyle {
+                                    font_size: 14.0,
+                                    color: Color::srgb(0.74, 0.95, 0.87),
+                                    font: load_game_font(&asset_server),
+                                },
+                            )
+                            .with_style(Style {
+                                justify_self: JustifySelf::Center,
+                                ..default()
+                            }),
+                        );
                     });
 
                     // Difficulty section
@@ -160,7 +183,7 @@ pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         );
 
                         section.spawn(TextBundle::from_section(
-                            "[1] Easy     —  2 bots, slower speed\n[2] Normal  —  3 bots, moderate speed\n[3] Hard    —  5 bots, fast speed",
+                            "[1] Easy     - 2 bots, slower speed\n[2] Normal  - 3 bots, moderate speed\n[3] Hard    - 5 bots, fast speed\n\nDaily challenge seed refreshes each run.",
                             TextStyle {
                                 font_size: 16.0,
                                 color: Color::srgb(1.0, 1.0, 1.0),
@@ -198,7 +221,7 @@ pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         );
 
                         section.spawn(TextBundle::from_section(
-                            "Arrow Keys  —  Move your snake\nQ or ESC  —  Quit game",
+                            "Arrow/WASD - Move\nShift - Sprint burst\nSpace - Magnet pulse\nM / C / V - Accessibility toggles\nQ or ESC - Quit round",
                             TextStyle {
                                 font_size: 16.0,
                                 color: Color::srgb(0.9, 0.95, 1.0),
@@ -236,10 +259,48 @@ pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
                         );
 
                         section.spawn(TextBundle::from_section(
-                            "Eat fruit to grow longer and gain points.\nAvoid walls and other snakes.\nBe the last snake standing!",
+                            "Eat fruit to grow and score.\nChain quick pickups for combo bonuses.\nOrange zone fruit grants bonus growth.\nBe the last snake standing!",
                             TextStyle {
                                 font_size: 16.0,
                                 color: Color::srgb(0.9, 0.95, 1.0),
+                                font: load_game_font(&asset_server),
+                            },
+                        ));
+                    });
+
+                    card.spawn(NodeBundle {
+                        style: Style {
+                            flex_direction: FlexDirection::Column,
+                            width: Val::Percent(100.0),
+                            padding: UiRect::all(Val::Px(16.0)),
+                            row_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        background_color: BackgroundColor(Color::srgba(0.22, 0.88, 0.70, 0.14)),
+                        ..default()
+                    })
+                    .with_children(|section| {
+                        section.spawn(TextBundle::from_section(
+                            "SESSION PROGRESSION",
+                            TextStyle {
+                                font_size: 18.0,
+                                color: Color::srgb(0.53, 1.0, 0.84),
+                                font: load_game_font(&asset_server),
+                            },
+                        ));
+
+                        section.spawn(TextBundle::from_section(
+                            format!(
+                                "Runs: {}\nQuest Clears: {}\nUnlocked Trails: {}\nDaily Best: {}\nTip: {}",
+                                game_data.meta_progress.runs_completed,
+                                game_data.meta_progress.total_quest_completions,
+                                game_data.meta_progress.unlocked_trails,
+                                game_data.meta_progress.daily_best_score,
+                                game_data.contextual_tip,
+                            ),
+                            TextStyle {
+                                font_size: 15.0,
+                                color: Color::srgb(0.92, 1.0, 0.96),
                                 font: load_game_font(&asset_server),
                             },
                         ));
@@ -270,8 +331,13 @@ pub fn spawn_round_summary_ui(
             .is_some_and(|entry| entry.name == "You");
 
         let meta = format!(
-            "Mode: {}\nHigh Score: {}\nTime Left: {}s",
-            results.mode_label, results.high_score, results.time_left
+            "Mode: {}\nHigh Score: {}\nTime Left: {}s\nBest Combo: x{}\nNear-Miss Bonus: {}\nQuest: {}",
+            results.mode_label,
+            results.high_score,
+            results.time_left,
+            results.best_combo,
+            results.near_miss_bonus,
+            if results.quest_completed { "Complete" } else { "In progress" },
         );
 
         let mut lines = vec!["Rankings".to_string(), "".to_string()];
@@ -407,8 +473,25 @@ pub fn spawn_round_summary_ui(
                     ));
                 });
 
+                let death_tip = match game_data
+                    .last_results
+                    .as_ref()
+                    .and_then(|r| r.player_death_cause)
+                {
+                    Some(crate::game::types::DeathCause::Wall) => "Tip: keep one tile of safety near walls.",
+                    Some(crate::game::types::DeathCause::SelfCollision) => "Tip: avoid tight loops right after sprint.",
+                    Some(crate::game::types::DeathCause::HeadToHead) => "Tip: only contest enemy heads when longer.",
+                    Some(crate::game::types::DeathCause::EatenBySnake) => "Tip: avoid crossing enemy bodies near heads.",
+                    Some(crate::game::types::DeathCause::TimeUp) => "Tip: prioritize combo chains for faster score growth.",
+                    Some(crate::game::types::DeathCause::Quit) => "Tip: instant replay with R keeps your rhythm.",
+                    _ => "Tip: hold center control and farm clustered fruit.",
+                };
+
                 card.spawn(TextBundle::from_section(
-                    "Press Enter/Space: Back to menu\nPress 1/2/3: Play again (Easy/Normal/Hard)",
+                    format!(
+                        "Press Enter/Space: Back to menu\nPress R: Instant replay\nPress 1/2/3: Play again (Easy/Normal/Hard)\n\n{}",
+                        death_tip
+                    ),
                     TextStyle {
                         font_size: 18.0,
                         color: Color::srgb(0.67, 0.93, 1.0),
@@ -452,6 +535,8 @@ pub fn summary_input(
 ) {
     if keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::Space) {
         next_state.set(GameState::Menu);
+    } else if keyboard.just_pressed(KeyCode::KeyR) {
+        next_state.set(GameState::Playing);
     } else if keyboard.just_pressed(KeyCode::Digit1) {
         game_data.selected_difficulty = Difficulty::Easy;
         next_state.set(GameState::Playing);

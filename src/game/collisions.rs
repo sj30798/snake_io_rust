@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::game::core::Game;
-use crate::game::types::Point;
+use crate::game::types::{DeathCause, Point};
 
 impl Game {
     pub(crate) fn resolve_head_to_head(&mut self) {
@@ -35,7 +35,7 @@ impl Game {
 
             if strongest_indices.len() > 1 && !player_wins_tie {
                 for i in indices {
-                    self.eliminate_snake(i);
+                    self.eliminate_snake_with_cause(i, DeathCause::HeadToHead);
                 }
             } else {
                 let winner = if player_wins_tie {
@@ -51,10 +51,29 @@ impl Game {
                 for i in indices {
                     if i != winner {
                         growth += self.snakes[i].len();
-                        self.eliminate_snake(i);
+                        self.eliminate_snake_with_cause(i, DeathCause::HeadToHead);
                     }
                 }
                 self.snakes[winner].pending_growth += growth;
+            }
+        }
+
+        // Near-miss reward for player if enemy heads are adjacent.
+        if let Some(player_idx) = self.snakes.iter().position(|s| s.is_player && s.alive) {
+            if let Some(player_head) = self.snakes[player_idx].head() {
+                for (idx, snake) in self.snakes.iter().enumerate() {
+                    if idx == player_idx || !snake.alive {
+                        continue;
+                    }
+                    if let Some(enemy_head) = snake.head() {
+                        let dist = (player_head.x - enemy_head.x).abs() + (player_head.y - enemy_head.y).abs();
+                        if dist == 1 {
+                            self.near_miss_bonus += 1;
+                            self.snakes[player_idx].pending_growth += 1;
+                            break;
+                        }
+                    }
+                }
             }
         }
     }
@@ -74,7 +93,7 @@ impl Game {
                 || head.y < 0
                 || head.y >= crate::game::types::HEIGHT
             {
-                self.eliminate_snake(i);
+                self.eliminate_snake_with_cause(i, DeathCause::Wall);
                 continue;
             }
 
@@ -84,7 +103,7 @@ impl Game {
                 .skip(1)
                 .any(|segment| *segment == head);
             if hit_self {
-                self.eliminate_snake(i);
+                self.eliminate_snake_with_cause(i, DeathCause::SelfCollision);
             }
         }
     }
@@ -124,7 +143,7 @@ impl Game {
 
             if seg_index == 0 {
                 let victim_len = self.snakes[victim].len();
-                self.eliminate_snake(victim);
+                self.eliminate_snake_with_cause(victim, DeathCause::EatenBySnake);
                 self.snakes[eater].pending_growth += victim_len;
             } else {
                 let victim_len = self.snakes[victim].len();
@@ -135,7 +154,7 @@ impl Game {
                 let eaten_amount = victim_len - kept_len;
                 self.snakes[victim].body.truncate(kept_len);
                 if self.snakes[victim].body.is_empty() {
-                    self.eliminate_snake(victim);
+                    self.eliminate_snake_with_cause(victim, DeathCause::EatenBySnake);
                 }
                 self.snakes[eater].pending_growth += eaten_amount;
             }
@@ -202,7 +221,7 @@ impl Game {
 
                     if seg_index == 0 {
                         let victim_len = self.snakes[snake_index].len();
-                        self.eliminate_snake(snake_index);
+                        self.eliminate_snake_with_cause(snake_index, DeathCause::EatenBySnake);
                         self.snakes[owner_index].pending_growth += victim_len;
                     } else {
                         let victim_len = self.snakes[snake_index].len();
@@ -210,7 +229,7 @@ impl Game {
                         let eaten_amount = victim_len.saturating_sub(kept_len);
                         self.snakes[snake_index].body.truncate(kept_len);
                         if self.snakes[snake_index].body.is_empty() {
-                            self.eliminate_snake(snake_index);
+                            self.eliminate_snake_with_cause(snake_index, DeathCause::EatenBySnake);
                         }
                         self.snakes[owner_index].pending_growth += eaten_amount;
                     }
@@ -247,6 +266,7 @@ mod tests {
             eliminated_at: None,
             color: if is_player { Color::Cyan } else { Color::Red },
             skin: crate::game::types::generate_skin(id, is_player, id as u64),
+            persona: None,
         }
     }
 
@@ -259,6 +279,20 @@ mod tests {
             start: Instant::now(),
             high_score: 0,
             quit_requested: false,
+            paused: false,
+            sprint_until: None,
+            sprint_cooldown_until: None,
+            combo_count: 0,
+            combo_until: None,
+            near_miss_bonus: 0,
+            total_fruits_eaten: 0,
+            magnet_until: None,
+            danger_zone_center: None,
+            danger_zone_until: None,
+            player_death_cause: None,
+            quest: crate::game::core::ActiveQuest { target_fruits: 30 },
+            quest_complete: false,
+            daily_seed: 0,
         }
     }
 

@@ -7,6 +7,7 @@ pub mod systems;
 use bevy::prelude::*;
 
 use crate::app::state::{GameData, GameState};
+use crate::app::systems::audio::{gameplay_audio_feedback, load_gameplay_audio_assets};
 use crate::app::systems::gameplay::{cleanup_game, game_input, game_update, start_game};
 use crate::app::systems::menu::{
     cleanup_menu_ui, menu_input, setup_camera, spawn_menu_ui, spawn_round_summary_ui,
@@ -22,14 +23,15 @@ impl Plugin for SnakeIoAppPlugin {
         app.insert_resource(ClearColor(Color::srgb(0.05, 0.08, 0.12)))
             .insert_state(GameState::Menu)
             .init_resource::<GameData>()
-            .add_systems(Startup, setup_camera)
+            .add_systems(Startup, (setup_camera, load_gameplay_audio_assets))
             .add_systems(OnEnter(GameState::Menu), spawn_menu_ui)
             .add_systems(OnExit(GameState::Menu), cleanup_menu_ui)
             .add_systems(Update, menu_input.run_if(in_state(GameState::Menu)))
             .add_systems(OnEnter(GameState::Playing), start_game)
             .add_systems(
                 Update,
-                (game_input, game_update, render_game).run_if(in_state(GameState::Playing)),
+                (game_input, game_update, gameplay_audio_feedback, render_game)
+                    .run_if(in_state(GameState::Playing)),
             )
             .add_systems(OnExit(GameState::Playing), cleanup_game)
             .add_systems(OnEnter(GameState::RoundSummary), spawn_round_summary_ui)
