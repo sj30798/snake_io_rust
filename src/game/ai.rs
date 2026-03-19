@@ -69,6 +69,7 @@ impl Game {
         score += self.bot_hunt_score(snake_index, next);
         score += self.attack_cell_bonus(snake_index, next);
         score += self.local_open_space_score(snake_index, next);
+        score += self.head_to_head_risk_score(snake_index, next);
 
         let center = Point {
             x: WIDTH / 2,
@@ -78,6 +79,37 @@ impl Game {
         // Small deterministic jitter avoids perfectly tied scores without mutating RNG state.
         let jitter_seed = (next.x * 31 + next.y * 17 + snake_index as i32 * 13) as f32;
         score + jitter_seed.sin().abs() * 0.001
+    }
+
+    fn head_to_head_risk_score(&self, snake_index: usize, next: Point) -> f32 {
+        let my_len = self.snakes[snake_index].len();
+        let mut score = 0.0;
+
+        for (idx, snake) in self.snakes.iter().enumerate() {
+            if idx == snake_index || !snake.alive {
+                continue;
+            }
+
+            let Some(enemy_head) = snake.head() else {
+                continue;
+            };
+
+            // If an enemy head is one move away from our candidate next cell,
+            // that enemy can contest this cell on the next tick.
+            let distance = manhattan(enemy_head, next);
+            if distance == 1 {
+                if snake.len() >= my_len {
+                    score -= 120.0;
+                } else {
+                    score -= 24.0;
+                }
+            } else if distance == 2 && snake.len() >= my_len {
+                // Mild caution zone for larger snakes nearby.
+                score -= 6.0;
+            }
+        }
+
+        score
     }
 
     fn bot_hunt_score(&self, snake_index: usize, next: Point) -> f32 {

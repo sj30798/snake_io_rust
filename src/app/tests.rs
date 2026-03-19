@@ -1,11 +1,14 @@
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
+use bevy::asset::AssetPlugin;
 
 use crate::app::components::{BoardDecor, Fruit, MenuUI, SnakeSegment, UIText};
-use crate::app::state::{GameData, GameState};
+use crate::app::state::{GameData, GameState, LastRoundResults, RoundRankEntry};
 use crate::app::systems::gameplay::{cleanup_game, game_input, game_update, start_game};
-use crate::app::systems::menu::{cleanup_menu_ui, menu_input};
+use crate::app::systems::menu::{
+    cleanup_menu_ui, format_last_results, menu_input, spawn_menu_ui, summary_input,
+};
 use crate::game::core::Game;
 use crate::game::types::{Difficulty, Direction};
 
@@ -75,7 +78,7 @@ fn game_update_transitions_back_to_menu_when_finished() {
     app.update();
 
     let state = app.world().resource::<State<GameState>>();
-    assert!(matches!(state.get(), GameState::Menu));
+    assert!(matches!(state.get(), GameState::RoundSummary));
 }
 
 #[test]
@@ -258,4 +261,221 @@ fn game_input_is_noop_when_game_missing() {
     let data = app.world().resource::<GameData>();
     let guard = data.game.lock().expect("game mutex should lock");
     assert!(guard.is_none());
+}
+
+#[test]
+fn spawn_menu_ui_contains_difficulty_text() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+        .init_resource::<GameData>()
+        .add_systems(Update, spawn_menu_ui);
+
+    app.update();
+
+    let mut found_title = false;
+    let mut found_options = false;
+
+    for entity in app.world().iter_entities() {
+        if let Some(text) = entity.get::<Text>() {
+            for section in &text.sections {
+                let value = section.value.as_str();
+                if value.contains("SELECT DIFFICULTY") {
+                    found_title = true;
+                }
+                if value.contains("[1] Easy") && value.contains("[3] Hard") {
+                    found_options = true;
+                }
+            }
+        }
+    }
+
+    assert!(found_title, "menu should show SELECT DIFFICULTY heading");
+    assert!(
+        found_options,
+        "menu should show all numbered difficulty options"
+    );
+}
+
+#[test]
+fn spawn_menu_ui_does_not_show_results_panel() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+        .init_resource::<GameData>()
+        .add_systems(Update, spawn_menu_ui);
+
+    // No results yet: panel title should not be present.
+    app.update();
+    let mut saw_results_title_without_data = false;
+    for entity in app.world().iter_entities() {
+        if let Some(text) = entity.get::<Text>() {
+            if text
+                .sections
+                .iter()
+                .any(|s| s.value.contains("LAST GAME RESULTS"))
+            {
+                saw_results_title_without_data = true;
+                break;
+            }
+        }
+    }
+    assert!(
+        !saw_results_title_without_data,
+        "main menu should not render results panel before any round"
+    );
+
+    // Add a snapshot and run the system again.
+    app.world_mut().resource_mut::<GameData>().last_results = Some(LastRoundResults {
+        mode_label: "Hard".to_string(),
+        high_score: 12,
+        time_left: 7,
+        entries: vec![RoundRankEntry {
+            rank: 1,
+            name: "You".to_string(),
+            score: 12,
+            alive: true,
+        }],
+    });
+
+    app.update();
+
+    let mut saw_results_title_with_data = false;
+    for entity in app.world().iter_entities() {
+        if let Some(text) = entity.get::<Text>() {
+            if text
+                .sections
+                .iter()
+                .any(|s| s.value.contains("LAST GAME RESULTS"))
+            {
+                saw_results_title_with_data = true;
+                break;
+            }
+        }
+    }
+
+    assert!(
+        !saw_results_title_with_data,
+        "main menu should not render results panel even when last_results exists"
+    );
+}
+
+#[test]
+fn spawn_menu_ui_contains_controls_and_objective_text() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+        .init_resource::<GameData>()
+        .add_systems(Update, spawn_menu_ui);
+
+    app.update();
+
+    let mut found_controls_heading = false;
+    let mut found_controls_details = false;
+    let mut found_objective_heading = false;
+    let mut found_objective_details = false;
+
+    for entity in app.world().iter_entities() {
+        if let Some(text) = entity.get::<Text>() {
+            for section in &text.sections {
+                let value = section.value.as_str();
+                if value.contains("GAMEPLAY CONTROLS") {
+                    found_controls_heading = true;
+                }
+                if value.contains("Arrow Keys") && value.contains("Q or ESC") {
+                    found_controls_details = true;
+                }
+                if value.contains("OBJECTIVE") {
+                    found_objective_heading = true;
+                }
+                if value.contains("Eat fruit to grow longer")
+                    && value.contains("Be the last snake standing")
+                {
+                    found_objective_details = true;
+                }
+            }
+        }
+    }
+
+    assert!(
+        found_controls_heading && found_controls_details,
+        "menu should show controls heading and instructions"
+    );
+    assert!(
+        found_objective_heading && found_objective_details,
+        "menu should show objective heading and objective details"
+    );
+}
+
+#[test]
+fn format_last_results_renders_placeholder_and_rankings() {
+    let empty = format_last_results(None);
+    assert!(empty.contains("No completed game yet"));
+    assert!(empty.contains("Start a round to see"));
+
+    let data = LastRoundResults {
+        mode_label: "Hard".to_string(),
+        high_score: 21,
+        time_left: 9,
+        entries: vec![
+            RoundRankEntry {
+                rank: 1,
+                name: "You".to_string(),
+                score: 21,
+                alive: true,
+            },
+            RoundRankEntry {
+                rank: 2,
+                name: "Bot 1".to_string(),
+                score: 17,
+                alive: false,
+            },
+        ],
+    };
+
+    let rendered = format_last_results(Some(&data));
+    assert!(rendered.contains("Mode: Hard"));
+    assert!(rendered.contains("High Score: 21"));
+    assert!(rendered.contains("Time Left: 9s"));
+    assert!(rendered.contains("1. You - 21 (alive)"));
+    assert!(rendered.contains("2. Bot 1 - 17 (out)"));
+}
+
+#[test]
+fn summary_input_returns_to_menu_on_enter() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, StatesPlugin))
+        .insert_state(GameState::RoundSummary)
+        .init_resource::<GameData>()
+        .insert_resource(ButtonInput::<KeyCode>::default())
+        .add_systems(Update, summary_input.run_if(in_state(GameState::RoundSummary)));
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Enter);
+
+    app.update();
+    app.update();
+
+    let state = app.world().resource::<State<GameState>>();
+    assert!(matches!(state.get(), GameState::Menu));
+}
+
+#[test]
+fn summary_input_can_start_new_round_with_difficulty_shortcuts() {
+    let mut app = App::new();
+    app.add_plugins((MinimalPlugins, StatesPlugin))
+        .insert_state(GameState::RoundSummary)
+        .init_resource::<GameData>()
+        .insert_resource(ButtonInput::<KeyCode>::default())
+        .add_systems(Update, summary_input.run_if(in_state(GameState::RoundSummary)));
+
+    app.world_mut()
+        .resource_mut::<ButtonInput<KeyCode>>()
+        .press(KeyCode::Digit3);
+
+    app.update();
+    app.update();
+
+    let state = app.world().resource::<State<GameState>>();
+    assert!(matches!(state.get(), GameState::Playing));
+    let data = app.world().resource::<GameData>();
+    assert!(matches!(data.selected_difficulty, Difficulty::Hard));
 }

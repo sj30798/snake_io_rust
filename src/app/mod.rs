@@ -8,7 +8,10 @@ use bevy::prelude::*;
 
 use crate::app::state::{GameData, GameState};
 use crate::app::systems::gameplay::{cleanup_game, game_input, game_update, start_game};
-use crate::app::systems::menu::{cleanup_menu_ui, menu_input, setup_camera, spawn_menu_ui};
+use crate::app::systems::menu::{
+    cleanup_menu_ui, menu_input, setup_camera, spawn_menu_ui, spawn_round_summary_ui,
+    summary_input,
+};
 use crate::app::systems::render::render_game;
 
 /// Plugin that wires together game state, resources, and ECS systems.
@@ -28,7 +31,10 @@ impl Plugin for SnakeIoAppPlugin {
                 Update,
                 (game_input, game_update, render_game).run_if(in_state(GameState::Playing)),
             )
-            .add_systems(OnExit(GameState::Playing), cleanup_game);
+            .add_systems(OnExit(GameState::Playing), cleanup_game)
+            .add_systems(OnEnter(GameState::RoundSummary), spawn_round_summary_ui)
+            .add_systems(OnExit(GameState::RoundSummary), cleanup_menu_ui)
+            .add_systems(Update, summary_input.run_if(in_state(GameState::RoundSummary)));
     }
 }
 

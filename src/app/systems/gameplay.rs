@@ -126,7 +126,7 @@ pub fn game_update(
     }
 
     if finished_round {
-        next_state.set(GameState::Menu);
+        next_state.set(GameState::RoundSummary);
     }
 }
 

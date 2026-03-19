@@ -318,7 +318,9 @@ pub(crate) fn bot_color(index: usize) -> Color {
 mod tests {
     use crossterm::style::Color;
 
-    use super::{bot_color, make_snake, manhattan, Difficulty, Direction, Point};
+    use super::{
+        bot_color, generate_skin, make_snake, manhattan, Difficulty, Direction, Point,
+    };
 
     #[test]
     fn point_add_uses_direction_delta() {
@@ -376,5 +378,35 @@ mod tests {
     fn bot_color_cycles_every_six() {
         assert_eq!(bot_color(0), bot_color(6));
         assert_eq!(bot_color(1), bot_color(7));
+    }
+
+    #[test]
+    fn hard_mode_bots_do_not_match_player_skin_base_color() {
+        let player = generate_skin(0, true, 0);
+        let player_rgb = (player.base_color.r, player.base_color.g, player.base_color.b);
+
+        // Hard mode uses 5 bots (ids 1..=5). None should share player base color.
+        for bot_id in 1..=5 {
+            let bot = generate_skin(bot_id, false, bot_id as u64);
+            let bot_rgb = (bot.base_color.r, bot.base_color.g, bot.base_color.b);
+            assert_ne!(bot_rgb, player_rgb, "bot {bot_id} should not match player color");
+        }
+    }
+
+    #[test]
+    fn generate_skin_is_deterministic_for_same_input() {
+        let a = generate_skin(3, false, 123);
+        let b = generate_skin(3, false, 123);
+
+        assert!(a.pattern_type == b.pattern_type);
+        assert!(a.eye_style == b.eye_style);
+        assert_eq!(
+            (a.base_color.r, a.base_color.g, a.base_color.b),
+            (b.base_color.r, b.base_color.g, b.base_color.b)
+        );
+        assert_eq!(
+            (a.pattern_color.r, a.pattern_color.g, a.pattern_color.b),
+            (b.pattern_color.r, b.pattern_color.g, b.pattern_color.b)
+        );
     }
 }

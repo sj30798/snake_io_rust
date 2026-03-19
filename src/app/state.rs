@@ -21,6 +21,8 @@ pub enum GameState {
     Menu,
     /// Active gameplay loop.
     Playing,
+    /// Post-round summary screen shown after a game ends.
+    RoundSummary,
 }
 
 /// Final standing row shown in menu after a round ends.

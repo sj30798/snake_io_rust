@@ -24,7 +24,8 @@ fn load_game_font(asset_server: &AssetServer) -> Handle<Font> {
     }
 }
 
-fn format_last_results(results: Option<&LastRoundResults>) -> String {
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn format_last_results(results: Option<&LastRoundResults>) -> String {
     if let Some(results) = results {
         let mut lines = vec![
             "Last Round".to_string(),
@@ -52,8 +53,8 @@ pub fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
-/// Spawns translucent menu overlay, menu card, and conditionally shows last-round results panel.
-pub fn spawn_menu_ui(mut commands: Commands, game_data: Res<GameData>, asset_server: Res<AssetServer>) {
+/// Spawns translucent menu overlay and menu card.
+pub fn spawn_menu_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands
         .spawn((
             NodeBundle {
@@ -245,50 +246,176 @@ pub fn spawn_menu_ui(mut commands: Commands, game_data: Res<GameData>, asset_ser
                     });
                 });
 
-            if game_data.last_results.is_some() {
-                let results_text = format_last_results(game_data.last_results.as_ref());
-                parent
-                    .spawn(NodeBundle {
-                        style: Style {
-                            position_type: PositionType::Absolute,
-                            right: Val::Px(26.0),
-                            bottom: Val::Px(26.0),
-                            width: Val::Px(360.0),
-                            padding: UiRect::all(Val::Px(20.0)),
-                            flex_direction: FlexDirection::Column,
-                            row_gap: Val::Px(12.0),
-                            ..default()
-                        },
-                        background_color: BackgroundColor(Color::srgba(0.1, 0.15, 0.22, 0.95)),
-                        ..default()
-                    })
-                    .with_children(|panel| {
-                        panel.spawn(
-                            TextBundle::from_section(
-                                "★ LAST GAME RESULTS ★",
-                                TextStyle {
-                                    font_size: 18.0,
-                                    color: Color::srgb(1.0, 0.9, 0.0),
-                                    font: load_game_font(&asset_server),
-                                },
-                            )
-                            .with_style(Style {
-                                justify_self: JustifySelf::Center,
-                                margin: UiRect::bottom(Val::Px(8.0)),
-                                ..default()
-                            }),
-                        );
+        });
+}
 
-                        panel.spawn(TextBundle::from_section(
-                            results_text,
-                            TextStyle {
-                                font_size: 16.0,
-                                color: Color::srgb(0.85, 0.95, 1.0),
-                                font: load_game_font(&asset_server),
-                            },
-                        ));
-                    });
-            }
+/// Spawns post-round summary overlay with replay options.
+pub fn spawn_round_summary_ui(
+    mut commands: Commands,
+    game_data: Res<GameData>,
+    asset_server: Res<AssetServer>,
+) {
+    let (winner_title, winner_is_player, meta_text, rankings_text) = if let Some(results) = game_data.last_results.as_ref() {
+        let winner = results
+            .entries
+            .first()
+            .map(|entry| {
+                let status = if entry.alive { "SURVIVED" } else { "OUT" };
+                format!("Winner: {}  |  Score: {}  |  {}", entry.name, entry.score, status)
+            })
+            .unwrap_or_else(|| "Winner: N/A".to_string());
+        let winner_is_player = results
+            .entries
+            .first()
+            .is_some_and(|entry| entry.name == "You");
+
+        let meta = format!(
+            "Mode: {}\nHigh Score: {}\nTime Left: {}s",
+            results.mode_label, results.high_score, results.time_left
+        );
+
+        let mut lines = vec!["Rankings".to_string(), "".to_string()];
+        for row in &results.entries {
+            let badge = match row.rank {
+                1 => "[1st]",
+                2 => "[2nd]",
+                3 => "[3rd]",
+                _ => "[   ]",
+            };
+            let status = if row.alive { "alive" } else { "out" };
+            lines.push(format!("{} {} - {} ({})", badge, row.name, row.score, status));
+        }
+
+        (winner, winner_is_player, meta, lines.join("\n"))
+    } else {
+        (
+            "Winner: N/A".to_string(),
+            false,
+            "No completed game found.".to_string(),
+            "Rankings\n\nStart a round to see standings.".to_string(),
+        )
+    };
+
+    let winner_bg = if winner_is_player {
+        Color::srgba(0.08, 0.26, 0.18, 0.94)
+    } else {
+        Color::srgba(0.26, 0.14, 0.14, 0.94)
+    };
+    let winner_fg = if winner_is_player {
+        Color::srgb(0.65, 1.0, 0.78)
+    } else {
+        Color::srgb(1.0, 0.78, 0.68)
+    };
+
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(0.0),
+                    top: Val::Px(0.0),
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                background_color: BackgroundColor(Color::srgba(0.01, 0.03, 0.06, 0.72)),
+                ..default()
+            },
+            MenuUI,
+        ))
+        .with_children(|root| {
+            root.spawn(NodeBundle {
+                style: Style {
+                    width: Val::Px(780.0),
+                    flex_direction: FlexDirection::Column,
+                    padding: UiRect::all(Val::Px(28.0)),
+                    row_gap: Val::Px(16.0),
+                    ..default()
+                },
+                background_color: BackgroundColor(Color::srgba(0.09, 0.13, 0.19, 0.95)),
+                ..default()
+            })
+            .with_children(|card| {
+                card.spawn(TextBundle::from_section(
+                    "ROUND COMPLETE",
+                    TextStyle {
+                        font_size: 44.0,
+                        color: Color::srgb(1.0, 0.88, 0.2),
+                        font: load_game_font(&asset_server),
+                    },
+                ));
+
+                card.spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(14.0)),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(winner_bg),
+                    ..default()
+                })
+                .with_children(|panel| {
+                    panel.spawn(TextBundle::from_section(
+                        winner_title,
+                        TextStyle {
+                            font_size: 22.0,
+                            color: winner_fg,
+                            font: load_game_font(&asset_server),
+                        },
+                    ));
+                });
+
+                card.spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(14.0)),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(Color::srgba(0.08, 0.16, 0.25, 0.90)),
+                    ..default()
+                })
+                .with_children(|panel| {
+                    panel.spawn(TextBundle::from_section(
+                        meta_text,
+                        TextStyle {
+                            font_size: 18.0,
+                            color: Color::srgb(0.88, 0.95, 1.0),
+                            font: load_game_font(&asset_server),
+                        },
+                    ));
+                });
+
+                card.spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        padding: UiRect::all(Val::Px(14.0)),
+                        ..default()
+                    },
+                    background_color: BackgroundColor(Color::srgba(0.11, 0.14, 0.22, 0.94)),
+                    ..default()
+                })
+                .with_children(|panel| {
+                    panel.spawn(TextBundle::from_section(
+                        rankings_text,
+                        TextStyle {
+                            font_size: 17.0,
+                            color: Color::srgb(0.92, 0.96, 1.0),
+                            font: load_game_font(&asset_server),
+                        },
+                    ));
+                });
+
+                card.spawn(TextBundle::from_section(
+                    "Press Enter/Space: Back to menu\nPress 1/2/3: Play again (Easy/Normal/Hard)",
+                    TextStyle {
+                        font_size: 18.0,
+                        color: Color::srgb(0.67, 0.93, 1.0),
+                        font: load_game_font(&asset_server),
+                    },
+                ));
+            });
         });
 }
 
@@ -306,6 +433,26 @@ pub fn menu_input(
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
     if keyboard.just_pressed(KeyCode::Digit1) {
+        game_data.selected_difficulty = Difficulty::Easy;
+        next_state.set(GameState::Playing);
+    } else if keyboard.just_pressed(KeyCode::Digit2) {
+        game_data.selected_difficulty = Difficulty::Normal;
+        next_state.set(GameState::Playing);
+    } else if keyboard.just_pressed(KeyCode::Digit3) {
+        game_data.selected_difficulty = Difficulty::Hard;
+        next_state.set(GameState::Playing);
+    }
+}
+
+/// Handles post-round summary hotkeys.
+pub fn summary_input(
+    mut next_state: ResMut<NextState<GameState>>,
+    mut game_data: ResMut<GameData>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+) {
+    if keyboard.just_pressed(KeyCode::Enter) || keyboard.just_pressed(KeyCode::Space) {
+        next_state.set(GameState::Menu);
+    } else if keyboard.just_pressed(KeyCode::Digit1) {
         game_data.selected_difficulty = Difficulty::Easy;
         next_state.set(GameState::Playing);
     } else if keyboard.just_pressed(KeyCode::Digit2) {
