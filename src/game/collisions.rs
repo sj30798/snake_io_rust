@@ -69,12 +69,20 @@ impl Game {
                 None => continue,
             };
 
-            if head.x < 0 || head.x >= crate::game::types::WIDTH || head.y < 0 || head.y >= crate::game::types::HEIGHT {
+            if head.x < 0
+                || head.x >= crate::game::types::WIDTH
+                || head.y < 0
+                || head.y >= crate::game::types::HEIGHT
+            {
                 self.eliminate_snake(i);
                 continue;
             }
 
-            let hit_self = self.snakes[i].body.iter().skip(1).any(|segment| *segment == head);
+            let hit_self = self.snakes[i]
+                .body
+                .iter()
+                .skip(1)
+                .any(|segment| *segment == head);
             if hit_self {
                 self.eliminate_snake(i);
             }
@@ -98,7 +106,9 @@ impl Game {
                     continue;
                 }
 
-                for (seg_index, segment) in self.snakes[victim_index].body.iter().copied().enumerate() {
+                for (seg_index, segment) in
+                    self.snakes[victim_index].body.iter().copied().enumerate()
+                {
                     if segment == eater_head {
                         interactions.push((eater_index, victim_index, seg_index));
                         break;
@@ -168,7 +178,11 @@ impl Game {
                     .iter()
                     .filter(|(idx, _)| self.snakes[*idx].alive)
                     .max_by_key(|(idx, seg)| {
-                        let head_priority = if has_head && *seg == 0 { 1usize } else { 0usize };
+                        let head_priority = if has_head && *seg == 0 {
+                            1usize
+                        } else {
+                            0usize
+                        };
                         (
                             head_priority,
                             self.snakes[*idx].len(),
@@ -207,5 +221,137 @@ impl Game {
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+    use std::time::Instant;
+
+    use crossterm::style::Color;
+    use rand::SeedableRng;
+
+    use crate::game::core::Game;
+    use crate::game::types::{Difficulty, Direction, Point, Snake};
+
+    fn snake_with_body(id: usize, body: Vec<Point>, is_player: bool) -> Snake {
+        Snake {
+            id,
+            body: VecDeque::from(body),
+            dir: Direction::Right,
+            next_dir: Direction::Right,
+            pending_growth: 0,
+            is_player,
+            alive: true,
+            eliminated_at: None,
+            color: if is_player { Color::Cyan } else { Color::Red },
+        }
+    }
+
+    fn make_game(snakes: Vec<Snake>) -> Game {
+        Game {
+            settings: Difficulty::Normal.settings(),
+            snakes,
+            fruits: Vec::new(),
+            rng: rand::rngs::StdRng::seed_from_u64(42),
+            start: Instant::now(),
+            high_score: 0,
+            quit_requested: false,
+        }
+    }
+
+    #[test]
+    fn head_to_head_player_wins_tie() {
+        let player = snake_with_body(
+            0,
+            vec![
+                Point { x: 5, y: 5 },
+                Point { x: 4, y: 5 },
+                Point { x: 3, y: 5 },
+            ],
+            true,
+        );
+        let bot = snake_with_body(
+            1,
+            vec![
+                Point { x: 5, y: 5 },
+                Point { x: 6, y: 5 },
+                Point { x: 7, y: 5 },
+            ],
+            false,
+        );
+        let mut game = make_game(vec![player, bot]);
+
+        game.resolve_head_to_head();
+
+        assert!(game.snakes[0].alive);
+        assert!(!game.snakes[1].alive);
+        assert!(game.snakes[0].pending_growth >= 3);
+    }
+
+    #[test]
+    fn wall_collision_eliminates_snake() {
+        let out_of_bounds = snake_with_body(
+            0,
+            vec![
+                Point { x: -1, y: 0 },
+                Point { x: 0, y: 0 },
+                Point { x: 1, y: 0 },
+            ],
+            true,
+        );
+        let mut game = make_game(vec![out_of_bounds]);
+
+        game.resolve_wall_and_self_collisions();
+
+        assert!(!game.snakes[0].alive);
+    }
+
+    #[test]
+    fn self_collision_eliminates_snake() {
+        let self_hit = snake_with_body(
+            0,
+            vec![
+                Point { x: 5, y: 5 },
+                Point { x: 6, y: 5 },
+                Point { x: 5, y: 5 },
+            ],
+            true,
+        );
+        let mut game = make_game(vec![self_hit]);
+
+        game.resolve_wall_and_self_collisions();
+
+        assert!(!game.snakes[0].alive);
+    }
+
+    #[test]
+    fn eating_body_segment_truncates_victim_and_grows_eater() {
+        let eater = snake_with_body(
+            0,
+            vec![
+                Point { x: 9, y: 10 },
+                Point { x: 8, y: 10 },
+                Point { x: 7, y: 10 },
+            ],
+            true,
+        );
+        let victim = snake_with_body(
+            1,
+            vec![
+                Point { x: 12, y: 10 },
+                Point { x: 11, y: 10 },
+                Point { x: 10, y: 10 },
+                Point { x: 9, y: 10 },
+            ],
+            false,
+        );
+        let mut game = make_game(vec![eater, victim]);
+
+        game.resolve_snake_eating();
+
+        assert!(game.snakes[0].pending_growth > 0);
+        assert!(game.snakes[1].len() < 4 || !game.snakes[1].alive);
     }
 }

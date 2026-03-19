@@ -40,7 +40,10 @@ pub fn render_game(
                 SpriteBundle {
                     sprite: Sprite {
                         color: Color::srgb(0.11, 0.15, 0.19),
-                        custom_size: Some(Vec2::new(game_width * CELL_SIZE, game_height * CELL_SIZE)),
+                        custom_size: Some(Vec2::new(
+                            game_width * CELL_SIZE,
+                            game_height * CELL_SIZE,
+                        )),
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(board_x_shift, 0.0, -0.5)),
@@ -61,7 +64,10 @@ pub fn render_game(
                 SpriteBundle {
                     sprite: Sprite {
                         color: border_color,
-                        custom_size: Some(Vec2::new(board_w + border_thickness * 2.0, border_thickness)),
+                        custom_size: Some(Vec2::new(
+                            board_w + border_thickness * 2.0,
+                            border_thickness,
+                        )),
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(
@@ -77,7 +83,10 @@ pub fn render_game(
                 SpriteBundle {
                     sprite: Sprite {
                         color: border_color,
-                        custom_size: Some(Vec2::new(board_w + border_thickness * 2.0, border_thickness)),
+                        custom_size: Some(Vec2::new(
+                            board_w + border_thickness * 2.0,
+                            border_thickness,
+                        )),
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(
@@ -93,7 +102,10 @@ pub fn render_game(
                 SpriteBundle {
                     sprite: Sprite {
                         color: border_color,
-                        custom_size: Some(Vec2::new(border_thickness, board_h + border_thickness * 2.0)),
+                        custom_size: Some(Vec2::new(
+                            border_thickness,
+                            board_h + border_thickness * 2.0,
+                        )),
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(
@@ -109,7 +121,10 @@ pub fn render_game(
                 SpriteBundle {
                     sprite: Sprite {
                         color: border_color,
-                        custom_size: Some(Vec2::new(border_thickness, board_h + border_thickness * 2.0)),
+                        custom_size: Some(Vec2::new(
+                            border_thickness,
+                            board_h + border_thickness * 2.0,
+                        )),
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(
@@ -179,7 +194,8 @@ pub fn render_game(
                         continue;
                     }
 
-                    let x = offset_x + segment.x as f32 * CELL_SIZE + CELL_SIZE / 2.0 + board_x_shift;
+                    let x =
+                        offset_x + segment.x as f32 * CELL_SIZE + CELL_SIZE / 2.0 + board_x_shift;
                     let y = offset_y - segment.y as f32 * CELL_SIZE - CELL_SIZE / 2.0;
 
                     let color = match snake.color {
@@ -194,7 +210,11 @@ pub fn render_game(
                         _ => Color::srgb(0.7, 0.7, 0.7),
                     };
 
-                    let size = if i == 0 { CELL_SIZE - 2.0 } else { CELL_SIZE - 3.0 };
+                    let size = if i == 0 {
+                        CELL_SIZE - 2.0
+                    } else {
+                        CELL_SIZE - 3.0
+                    };
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {

@@ -2,7 +2,7 @@ use crossterm::style::Color;
 use rand::Rng;
 
 use crate::game::core::Game;
-use crate::game::types::{Direction, MAX_BOTS, Point, WIDTH, HEIGHT, bot_color, make_snake};
+use crate::game::types::{bot_color, make_snake, Direction, Point, HEIGHT, MAX_BOTS, WIDTH};
 
 impl Game {
     pub(crate) fn spawn_snakes(&mut self) {
@@ -105,5 +105,94 @@ impl Game {
             return Some(p);
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::VecDeque;
+    use std::time::Instant;
+
+    use crossterm::style::Color;
+    use rand::SeedableRng;
+
+    use crate::game::core::Game;
+    use crate::game::types::{Direction, GameSettings, Point, Snake, HEIGHT, WIDTH};
+
+    fn custom_settings(bot_count: usize, fruit_count: usize) -> GameSettings {
+        GameSettings {
+            difficulty: crate::game::types::Difficulty::Normal,
+            fruit_count,
+            bot_count,
+            tick_ms: 120,
+            game_time_seconds: 90,
+            bot_aggression: 0.85,
+        }
+    }
+
+    fn empty_game(settings: GameSettings) -> Game {
+        Game {
+            settings,
+            snakes: Vec::new(),
+            fruits: Vec::new(),
+            rng: rand::rngs::StdRng::seed_from_u64(5),
+            start: Instant::now(),
+            high_score: 0,
+            quit_requested: false,
+        }
+    }
+
+    #[test]
+    fn spawn_snakes_caps_bot_count() {
+        let settings = custom_settings(99, 0);
+        let mut game = empty_game(settings);
+
+        game.spawn_snakes();
+
+        // 1 player + MAX_BOTS
+        assert_eq!(game.snakes.len(), 1 + crate::game::types::MAX_BOTS);
+        assert!(game.snakes[0].is_player);
+    }
+
+    #[test]
+    fn refill_fruits_reaches_target_when_space_available() {
+        let settings = custom_settings(0, 8);
+        let mut game = empty_game(settings);
+
+        game.spawn_snakes();
+        game.fruits.clear();
+        game.refill_fruits();
+
+        assert_eq!(game.fruits.len(), 8);
+        for p in &game.fruits {
+            assert!(p.x >= 0 && p.x < WIDTH && p.y >= 0 && p.y < HEIGHT);
+        }
+    }
+
+    #[test]
+    fn update_high_score_tracks_longest_snake() {
+        let settings = custom_settings(0, 0);
+        let mut game = empty_game(settings);
+        let mut body = VecDeque::new();
+        body.push_back(Point { x: 5, y: 5 });
+        body.push_back(Point { x: 4, y: 5 });
+        body.push_back(Point { x: 3, y: 5 });
+        body.push_back(Point { x: 2, y: 5 });
+        body.push_back(Point { x: 1, y: 5 });
+
+        game.snakes = vec![Snake {
+            id: 0,
+            body,
+            dir: Direction::Right,
+            next_dir: Direction::Right,
+            pending_growth: 0,
+            is_player: true,
+            alive: true,
+            eliminated_at: None,
+            color: Color::Cyan,
+        }];
+
+        game.update_high_score();
+        assert_eq!(game.high_score, 5);
     }
 }

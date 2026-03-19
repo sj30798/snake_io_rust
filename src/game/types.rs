@@ -194,3 +194,68 @@ pub(crate) fn bot_color(index: usize) -> Color {
         _ => Color::DarkCyan,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crossterm::style::Color;
+
+    use super::{bot_color, make_snake, manhattan, Difficulty, Direction, Point};
+
+    #[test]
+    fn point_add_uses_direction_delta() {
+        let p = Point { x: 10, y: 5 };
+        let moved = p.add(Direction::Left);
+        assert_eq!(moved.x, 9);
+        assert_eq!(moved.y, 5);
+    }
+
+    #[test]
+    fn opposite_direction_is_inverse() {
+        assert!(matches!(Direction::Up.opposite(), Direction::Down));
+        assert!(matches!(Direction::Down.opposite(), Direction::Up));
+        assert!(matches!(Direction::Left.opposite(), Direction::Right));
+        assert!(matches!(Direction::Right.opposite(), Direction::Left));
+    }
+
+    #[test]
+    fn snake_rejects_immediate_reverse_turn() {
+        let mut snake = make_snake(0, Point { x: 4, y: 4 }, Direction::Right, true, Color::Cyan);
+        snake.set_direction(Direction::Left);
+        assert!(matches!(snake.next_dir, Direction::Right));
+    }
+
+    #[test]
+    fn snake_moves_and_grows_when_pending_growth() {
+        let mut snake = make_snake(0, Point { x: 4, y: 4 }, Direction::Right, true, Color::Cyan);
+        let initial_len = snake.len();
+        snake.pending_growth = 1;
+        snake.move_forward();
+        assert_eq!(snake.len(), initial_len + 1);
+        assert_eq!(snake.pending_growth, 0);
+    }
+
+    #[test]
+    fn difficulty_profiles_are_ordered_by_speed_and_bots() {
+        let easy = Difficulty::Easy.settings();
+        let normal = Difficulty::Normal.settings();
+        let hard = Difficulty::Hard.settings();
+
+        assert!(easy.tick_ms > normal.tick_ms);
+        assert!(normal.tick_ms > hard.tick_ms);
+        assert!(easy.bot_count < normal.bot_count);
+        assert!(normal.bot_count < hard.bot_count);
+    }
+
+    #[test]
+    fn manhattan_distance_is_correct() {
+        let a = Point { x: 1, y: 2 };
+        let b = Point { x: 4, y: -2 };
+        assert_eq!(manhattan(a, b), 7);
+    }
+
+    #[test]
+    fn bot_color_cycles_every_six() {
+        assert_eq!(bot_color(0), bot_color(6));
+        assert_eq!(bot_color(1), bot_color(7));
+    }
+}

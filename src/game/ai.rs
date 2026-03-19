@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::game::core::Game;
-use crate::game::types::{Direction, Point, WIDTH, HEIGHT, manhattan};
+use crate::game::types::{manhattan, Direction, Point, HEIGHT, WIDTH};
 
 impl Game {
     pub(crate) fn update_bot_directions(&mut self) {
@@ -136,7 +136,12 @@ impl Game {
     }
 
     fn local_open_space_score(&self, snake_index: usize, origin: Point) -> f32 {
-        let neighbors = [Direction::Up, Direction::Right, Direction::Down, Direction::Left];
+        let neighbors = [
+            Direction::Up,
+            Direction::Right,
+            Direction::Down,
+            Direction::Left,
+        ];
         let mut safe_count = 0.0;
         for dir in neighbors {
             let p = origin.add(dir);

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-label="Snake IO gameplay placeholder">
+  <rect width="1200" height="700" fill="#0a0f1f"/>
+  <rect x="80" y="80" width="1040" height="540" rx="14" fill="#121a2f" stroke="#818cf8" stroke-width="4"/>
+  <text x="115" y="150" fill="#c7d2fe" font-size="42" font-family="Segoe UI, Arial, sans-serif">Gameplay Clip Placeholder</text>
+  <text x="115" y="205" fill="#a5b4fc" font-size="24" font-family="Segoe UI, Arial, sans-serif">Replace with a GIF or MP4 preview:</text>
+  <text x="115" y="245" fill="#c4b5fd" font-size="22" font-family="Consolas, monospace">docs/media/gameplay.gif</text>
+</svg>

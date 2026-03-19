@@ -31,3 +31,6 @@ impl Plugin for SnakeIoAppPlugin {
             .add_systems(OnExit(GameState::Playing), cleanup_game);
     }
 }
+
+#[cfg(test)]
+mod tests;
