@@ -50,6 +50,120 @@ impl Direction {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PatternType {
+    Solid,
+    Stripes,
+    Dots,
+    Gradient,
+    Scales,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RGB {
+    pub(crate) r: f32,
+    pub(crate) g: f32,
+    pub(crate) b: f32,
+}
+
+impl RGB {
+    pub(crate) fn new(r: f32, g: f32, b: f32) -> Self {
+        Self { r, g, b }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct Skin {
+    pub(crate) base_color: RGB,
+    pub(crate) pattern_type: PatternType,
+    pub(crate) pattern_color: RGB,
+    pub(crate) eye_style: EyeStyle,
+    #[allow(dead_code)]
+    pub(crate) seed: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EyeStyle {
+    Round,
+    Oval,
+    Angular,
+    None,
+}
+
+pub(crate) fn generate_skin(index: usize, is_player: bool, seed: u64) -> Skin {
+    let pattern_variants = [
+        PatternType::Solid,
+        PatternType::Stripes,
+        PatternType::Dots,
+        PatternType::Gradient,
+        PatternType::Scales,
+    ];
+
+    let pattern_idx = (index + (seed as usize)) % pattern_variants.len();
+    let pattern_type = pattern_variants[pattern_idx];
+
+    let base_colors: Vec<RGB> = if is_player {
+        vec![
+            RGB::new(0.0, 1.0, 1.0),   // Cyan
+            RGB::new(0.0, 0.8, 1.0),   // Light blue
+            RGB::new(0.2, 0.9, 1.0),   // Sky blue
+        ]
+    } else {
+        vec![
+            RGB::new(1.0, 0.2, 0.2),   // Red
+            RGB::new(0.2, 1.0, 0.2),   // Green
+            RGB::new(1.0, 0.0, 1.0),   // Magenta
+            RGB::new(0.2, 0.6, 1.0),   // Blue
+            RGB::new(1.0, 0.8, 0.0),   // Yellow
+            RGB::new(1.0, 0.4, 0.0),   // Orange
+        ]
+    };
+
+    let color_idx = index % base_colors.len();
+    let base_color = base_colors[color_idx];
+
+    let pattern_color = match pattern_type {
+        PatternType::Solid => base_color,
+        PatternType::Stripes => RGB::new(
+            (base_color.r * 0.7).max(0.3),
+            (base_color.g * 0.7).max(0.3),
+            (base_color.b * 0.7).max(0.3),
+        ),
+        PatternType::Dots => RGB::new(
+            (base_color.r + 0.3).min(1.0),
+            (base_color.g + 0.3).min(1.0),
+            (base_color.b + 0.3).min(1.0),
+        ),
+        PatternType::Gradient => RGB::new(
+            (base_color.r * 1.3).min(1.0),
+            (base_color.g * 1.3).min(1.0),
+            (base_color.b * 1.3).min(1.0),
+        ),
+        PatternType::Scales => RGB::new(
+            (base_color.r * 0.85).max(0.1),
+            (base_color.g * 0.85).max(0.1),
+            (base_color.b * 0.85).max(0.1),
+        ),
+    };
+
+    let eye_styles = [
+        EyeStyle::Round,
+        EyeStyle::Oval,
+        EyeStyle::Angular,
+        EyeStyle::None,
+    ];
+    let eye_idx = (index + (seed as usize) / 7) % eye_styles.len();
+    let eye_style = eye_styles[eye_idx];
+
+    Skin {
+        base_color,
+        pattern_type,
+        pattern_color,
+        eye_style,
+        seed,
+    }
+}
+
 pub(crate) struct Snake {
     pub(crate) id: usize,
     pub(crate) body: VecDeque<Point>,
@@ -59,7 +173,9 @@ pub(crate) struct Snake {
     pub(crate) is_player: bool,
     pub(crate) alive: bool,
     pub(crate) eliminated_at: Option<u64>,
+    #[allow(dead_code)]
     pub(crate) color: Color,
+    pub(crate) skin: Skin,
 }
 
 impl Snake {
@@ -171,6 +287,8 @@ pub(crate) fn make_snake(
     body.push_back(start.add(dir.opposite()));
     body.push_back(start.add(dir.opposite()).add(dir.opposite()));
 
+    let skin = generate_skin(id, is_player, id as u64);
+
     Snake {
         id,
         body,
@@ -181,6 +299,7 @@ pub(crate) fn make_snake(
         alive: true,
         eliminated_at: None,
         color,
+        skin,
     }
 }
 

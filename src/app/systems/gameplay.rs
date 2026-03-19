@@ -4,9 +4,50 @@ use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
 
 use crate::app::components::{BoardDecor, Fruit, SnakeSegment, UIText};
-use crate::app::state::{GameData, GameState};
+use crate::app::state::{GameData, GameState, LastRoundResults, RoundRankEntry};
 use crate::game::core::Game;
 use crate::game::types::Direction;
+
+fn build_last_round_results(game: &Game) -> LastRoundResults {
+    let mut entries: Vec<_> = game
+        .snakes
+        .iter()
+        .map(|snake| {
+            let name = if snake.is_player {
+                "You".to_string()
+            } else {
+                format!("Bot {}", snake.id)
+            };
+            (snake.id, snake.is_player, snake.alive, snake.len(), name)
+        })
+        .collect();
+
+    // Rank by score first, then alive status, then player priority, then stable id.
+    entries.sort_by(|a, b| {
+        b.3.cmp(&a.3)
+            .then_with(|| b.2.cmp(&a.2))
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    let ranked = entries
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (_, _, alive, score, name))| RoundRankEntry {
+            rank: idx + 1,
+            name,
+            score,
+            alive,
+        })
+        .collect();
+
+    LastRoundResults {
+        mode_label: game.settings.label().to_string(),
+        high_score: game.high_score,
+        time_left: game.remaining_seconds(),
+        entries: ranked,
+    }
+}
 
 /// Creates a new game model when entering `Playing`.
 pub fn start_game(mut game_data: ResMut<GameData>) {
@@ -92,15 +133,20 @@ pub fn game_update(
 /// Clears game model and despawns all entities rendered in `Playing` state.
 pub fn cleanup_game(
     mut commands: Commands,
-    game_data: ResMut<GameData>,
+    mut game_data: ResMut<GameData>,
     board_decor: Query<Entity, With<BoardDecor>>,
     snake_segments: Query<Entity, With<SnakeSegment>>,
     fruits: Query<Entity, With<Fruit>>,
     ui_texts: Query<Entity, With<UIText>>,
 ) {
-    if let Ok(mut game) = game_data.game.lock() {
-        *game = None;
+    let mut last_results = None;
+    if let Ok(mut game_opt) = game_data.game.lock() {
+        if let Some(game) = game_opt.as_ref() {
+            last_results = Some(build_last_round_results(game));
+        }
+        *game_opt = None;
     }
+    game_data.last_results = last_results;
 
     for entity in &board_decor {
         commands.entity(entity).despawn_recursive();

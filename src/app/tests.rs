@@ -120,6 +120,15 @@ fn cleanup_game_clears_model_and_gameplay_entities() {
     let data = app.world().resource::<GameData>();
     let guard = data.game.lock().expect("game mutex should lock");
     assert!(guard.is_none());
+    drop(guard);
+
+    let last_results = data
+        .last_results
+        .as_ref()
+        .expect("cleanup should snapshot last-round results");
+    assert!(!last_results.entries.is_empty());
+    assert_eq!(last_results.entries[0].rank, 1);
+    assert!(last_results.entries.iter().any(|row| row.name == "You"));
 
     let board_count = app
         .world()

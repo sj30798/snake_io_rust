@@ -116,6 +116,7 @@ mod tests {
             alive: true,
             eliminated_at: None,
             color: if is_player { Color::Cyan } else { Color::Red },
+            skin: crate::game::types::generate_skin(id, is_player, id as u64),
         }
     }
 

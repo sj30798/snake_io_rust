@@ -190,6 +190,7 @@ mod tests {
             alive: true,
             eliminated_at: None,
             color: Color::Cyan,
+            skin: crate::game::types::generate_skin(0, true, 0),
         }];
 
         game.update_high_score();
