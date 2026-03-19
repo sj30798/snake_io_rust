@@ -75,7 +75,9 @@ impl Game {
             y: HEIGHT / 2,
         };
         score += 10.0 / (1.0 + manhattan(next, center) as f32);
-        score + rand::random_range(0.0f32..1.0f32)
+        // Small deterministic jitter avoids perfectly tied scores without mutating RNG state.
+        let jitter_seed = (next.x * 31 + next.y * 17 + snake_index as i32 * 13) as f32;
+        score + jitter_seed.sin().abs() * 0.001
     }
 
     fn bot_hunt_score(&self, snake_index: usize, next: Point) -> f32 {

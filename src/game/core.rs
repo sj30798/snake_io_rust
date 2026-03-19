@@ -1,13 +1,15 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
+use rand::SeedableRng;
+
 use crate::game::types::{GameSettings, Point, RoundSummary, Snake};
 
 pub(crate) struct Game {
     pub(crate) settings: GameSettings,
     pub(crate) snakes: Vec<Snake>,
     pub(crate) fruits: Vec<Point>,
-    pub(crate) rng: rand::rngs::ThreadRng,
+    pub(crate) rng: rand::rngs::StdRng,
     pub(crate) start: Instant,
     pub(crate) high_score: usize,
     pub(crate) quit_requested: bool,
@@ -19,7 +21,7 @@ impl Game {
             settings,
             snakes: Vec::new(),
             fruits: Vec::new(),
-            rng: rand::rng(),
+            rng: rand::rngs::StdRng::from_entropy(),
             start: Instant::now(),
             high_score: 0,
             quit_requested: false,
@@ -63,6 +65,10 @@ impl Game {
             || self.alive_snake_count() <= 1
     }
 
+    pub(crate) fn get_is_finished(&self) -> bool {
+        self.is_finished()
+    }
+
     fn elapsed_seconds(&self) -> u64 {
         self.start.elapsed().as_secs()
     }
@@ -83,8 +89,16 @@ impl Game {
         Duration::from_millis(tick_ms)
     }
 
+    pub(crate) fn get_current_tick_duration(&self) -> Duration {
+        self.current_tick_duration()
+    }
+
     pub(crate) fn player(&self) -> Option<&Snake> {
         self.snakes.iter().find(|s| s.is_player)
+    }
+
+    pub(crate) fn player_mut(&mut self) -> Option<&mut Snake> {
+        self.snakes.iter_mut().find(|s| s.is_player)
     }
 
     pub(crate) fn alive_snake_count(&self) -> usize {

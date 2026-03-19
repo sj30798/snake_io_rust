@@ -124,15 +124,11 @@ impl Game {
         }
     }
 
-    fn player_mut(&mut self) -> Option<&mut Snake> {
-        self.snakes.iter_mut().find(|s| s.is_player)
-    }
-
     fn random_empty_cell(&mut self) -> Option<Point> {
         for _ in 0..500 {
             let p = Point {
-                x: self.rng.random_range(0..WIDTH),
-                y: self.rng.random_range(0..HEIGHT),
+                x: self.rng.gen_range(0..WIDTH),
+                y: self.rng.gen_range(0..HEIGHT),
             };
 
             if self.fruits.contains(&p) {
